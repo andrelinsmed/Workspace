@@ -9,7 +9,7 @@ window.WORKSPACE = {
       id: 'lia',
       nome: 'Lia',
       papel: 'Assistente comercial · reuniões, resumos, agenda e CRM',
-      api: 'COLE_AQUI_A_URL_EXEC_DA_LIA',
+      api: 'https://script.google.com/macros/s/AKfycbzk5nNV5RA2BOazzcmZ2q1QmwP7B8TkE0EE1O0gtvse05nmqorG1bO8573cNioCPeUc/exec',
       cor: '#0f766e'
     },
     {

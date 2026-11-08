@@ -267,3 +267,177 @@ tr.clicavel:hover td { background: var(--surface-2); }
   .kpi-valor { font-size: 26px; }
   .marca-txt { display: none; }
 }
+
+/* =========================================================
+   Escritório da Lia (animação)
+   ========================================================= */
+.esc { overflow: hidden; }
+.esc-palco { position: relative; background: #e8efe9; }
+.esc-svg { display: block; width: 100%; height: auto; max-height: 360px; }
+.esc-legenda { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.esc-humor { font-size: 22px; line-height: 1; }
+.esc-legenda b { display: block; font-size: 15px; }
+.esc-legenda span.det { color: var(--muted); font-size: 13.5px; }
+.esc-previa { margin-left: auto; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.esc-previa small { color: var(--faint); font-size: 12px; margin-right: 2px; }
+.esc-previa button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+.esc-previa button.ativo { background: var(--accent); border-color: var(--accent); color: #fff; }
+.esc.compacto .esc-svg { max-height: 220px; }
+
+/* cenário */
+.esc-parede { fill: #eef3ee; }
+.esc-chao { fill: #d9cbb4; }
+.esc-rodape { fill: #c4b291; }
+.esc-moldura { fill: #fff; stroke: #cbd5d0; stroke-width: 1; }
+.esc-ceu { fill: #bfe3f5; transition: fill .6s; }
+.esc-ceu-noite { fill: #1e2b4a; }
+.esc-sol { fill: #fcd34d; }
+.esc-noite { opacity: 0; transition: opacity .6s; }
+.esc-nuvem { animation: esc-nuvem 18s linear infinite; }
+.esc-madeira { fill: #b98a5a; }
+.esc-madeira-escura { fill: #8f6740; }
+.esc-metal { fill: #94a3b8; }
+.esc-monitor { fill: #1f2937; }
+.tela-fundo { fill: #0f1d1a; transition: fill .4s; }
+.esc-teclado { fill: #cbd5e1; stroke: #94a3b8; stroke-width: 1; }
+.esc-caneca { fill: #0f766e; }
+.esc-caneca-alca { stroke: #0f766e; stroke-width: 3; }
+.esc-cadeira { fill: #334155; }
+.esc-sombra { fill: #0b1530; opacity: 0; pointer-events: none; transition: opacity .8s; }
+.esc-folha { transform-box: fill-box; transform-origin: 50% 100%; animation: esc-folha 4s ease-in-out infinite; }
+.esc-folha.f2 { animation-delay: -2s; }
+.fumaca path { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-linecap: round; opacity: 0; animation: esc-fumaca 3s ease-out infinite; }
+.fumaca .f2 { animation-delay: 1.5s; }
+
+/* Lia */
+.lia-corpo, .lia-cabeca-forma { fill: #14b8a6; }
+.lia-cabeca-forma { fill: #2dd4bf; }
+.lia-orelha { fill: #0f766e; }
+.lia-peito { fill: #0f766e; }
+.lia-led { fill: #a7f3d0; animation: esc-pisca 1.2s steps(2) infinite; }
+.lia-led.l2 { animation-delay: .6s; }
+.lia-braco { fill: none; stroke: #14b8a6; stroke-width: 9; stroke-linecap: round; }
+.lia-mao { fill: #0f766e; }
+.lia-antena { stroke: #0f766e; stroke-width: 3; stroke-linecap: round; }
+.lia-luz { fill: #a7f3d0; }
+.lia-visor { fill: #0b1f1c; transition: fill .3s; }
+.lia-olho { fill: #5eead4; }
+.lia-olho.bravo { fill: #fca5a5; }
+.lia-traco { fill: none; stroke: #5eead4; stroke-width: 3; stroke-linecap: round; }
+.lia-traco.vermelho { stroke: #f87171; }
+.boca { fill: none; stroke: #5eead4; stroke-width: 2.5; stroke-linecap: round; display: none; }
+.boca-feliz { fill: #5eead4; }
+.boca-brava { stroke: #f87171; }
+.boca-dormindo { fill: #5eead4; stroke: none; }
+.lia-bochecha { fill: #f9a8d4; opacity: 0; transition: opacity .3s; }
+.olhos { display: none; }
+.lia-bracos-alto, .vapor, .zzz, .confete, .tela { display: none; }
+.lia-cabeca, .lia-corpo-todo, .lia, .lia-braco-e, .lia-braco-d, .lia-aceno-e, .lia-aceno-d { transform-box: fill-box; }
+.lia-cabeca { transform-origin: 50% 100%; }
+.lia-corpo-todo { transform-origin: 50% 100%; }
+.lia-braco-e, .lia-aceno-e { transform-origin: 100% 0%; }
+.lia-braco-d, .lia-aceno-d { transform-origin: 100% 0%; }
+.lia-aceno-d { transform-origin: 0% 100%; }
+.lia-aceno-e { transform-origin: 100% 100%; }
+.zzz text { font: 700 16px var(--font); fill: #64748b; }
+.vapor circle { fill: #e2e8f0; }
+
+/* ---- trabalhando ---- */
+.esc.trabalhando .olhos-abertos, .esc.trabalhando .boca-normal { display: inline; }
+.esc.trabalhando .olhos-abertos { transform: translateX(-4px); animation: esc-piscar 4s infinite; transform-box: fill-box; transform-origin: center; }
+.esc.trabalhando .tela-codigo { display: inline; }
+.esc.trabalhando .codigo-rolando { animation: esc-rolar 6s linear infinite; }
+.esc.trabalhando .cursor { animation: esc-pisca 1s steps(2) infinite; }
+.esc.trabalhando .lia-braco-e { animation: esc-digita 0.32s ease-in-out infinite alternate; }
+.esc.trabalhando .lia-braco-d { animation: esc-digita 0.32s ease-in-out infinite alternate-reverse; }
+.esc.trabalhando .lia-cabeca { animation: esc-balanca 2.4s ease-in-out infinite; }
+.esc.trabalhando .lia-luz { animation: esc-pisca 1.4s steps(2) infinite; fill: #4ade80; }
+
+/* ---- raiva (erro) ---- */
+.esc.raiva .olhos-bravos, .esc.raiva .boca-brava { display: inline; }
+.esc.raiva .lia-visor { fill: #3b0d0d; }
+.esc.raiva .lia-cabeca-forma { fill: #fb7185; }
+.esc.raiva .lia-corpo, .esc.raiva .lia-braco { fill: #f43f5e; stroke: #f43f5e; }
+.esc.raiva .lia-braco { fill: none; }
+.esc.raiva .lia-corpo-todo { animation: esc-tremer .18s linear infinite; }
+.esc.raiva .lia-luz { fill: #ef4444; animation: esc-pisca .4s steps(2) infinite; }
+.esc.raiva .vapor { display: inline; }
+.esc.raiva .vapor circle { animation: esc-vapor 1.2s ease-out infinite; }
+.esc.raiva .vapor circle:nth-child(2) { animation-delay: .3s; }
+.esc.raiva .vapor circle:nth-child(3) { animation-delay: .6s; }
+.esc.raiva .vapor circle:nth-child(4) { animation-delay: .9s; }
+.esc.raiva .tela-erro { display: inline; animation: esc-pisca .8s steps(2) infinite; }
+.esc.raiva .tela-fundo { fill: #7f1d1d; }
+.esc.raiva .lia-braco-e { animation: esc-soco .35s ease-in-out infinite alternate; }
+.esc.raiva .lia-braco-d { animation: esc-soco .35s ease-in-out infinite alternate-reverse; }
+.esc.raiva .fumaca path { animation: none; }
+.tela-erro-x { font: 700 26px var(--font); fill: #fecaca; }
+.tela-txt { font: 700 12px var(--font); fill: #fff; letter-spacing: .08em; }
+
+/* ---- feliz (relatório enviado) ---- */
+.esc.feliz .olhos-felizes, .esc.feliz .boca-feliz { display: inline; }
+.esc.feliz .lia-bochecha { opacity: .9; }
+.esc.feliz .lia-bracos-digitando { display: none; }
+.esc.feliz .lia-bracos-alto { display: inline; }
+.esc.feliz .lia-aceno-e { animation: esc-acena-e .5s ease-in-out infinite alternate; }
+.esc.feliz .lia-aceno-d { animation: esc-acena-d .5s ease-in-out infinite alternate; }
+.esc.feliz .lia { animation: esc-pula .7s ease-in-out infinite; transform-origin: 50% 100%; }
+.esc.feliz .lia-luz { fill: #fde047; }
+.esc.feliz .tela-relatorio { display: inline; }
+.esc.feliz .tela-fundo { fill: #134e4a; }
+.esc.feliz .confete { display: inline; }
+.esc.feliz .confete > * { transform-box: fill-box; transform-origin: center; animation: esc-confete 1.6s ease-in infinite; }
+.esc.feliz .confete > :nth-child(2n) { animation-delay: .4s; }
+.esc.feliz .confete > :nth-child(3n) { animation-delay: .8s; }
+.esc.feliz .confete > :nth-child(5n) { animation-delay: 1.2s; }
+
+/* ---- dormindo (terminou) ---- */
+.esc.dormindo .olhos-dormindo, .esc.dormindo .boca-dormindo { display: inline; }
+.esc.dormindo .lia-cabeca { animation: esc-cochila 4s ease-in-out infinite; }
+.esc.dormindo .lia-corpo-todo { animation: esc-respira 4s ease-in-out infinite; }
+.esc.dormindo .lia-luz { fill: #475569; }
+.esc.dormindo .lia-led { animation: none; fill: #334155; }
+.esc.dormindo .zzz { display: inline; }
+.esc.dormindo .zzz text { animation: esc-zzz 3s ease-out infinite; opacity: 0; }
+.esc.dormindo .zzz .z2 { animation-delay: 1s; }
+.esc.dormindo .zzz .z3 { animation-delay: 2s; }
+.esc.dormindo .tela-dormindo { display: inline; }
+.esc.dormindo .tela-fundo { fill: #05090a; }
+.esc.dormindo .protetor { fill: #334155; animation: esc-protetor 8s ease-in-out infinite; }
+.esc.dormindo .esc-ceu { fill: #1e2b4a; }
+.esc.dormindo .esc-noite { opacity: 1; }
+.esc.dormindo .esc-sol, .esc.dormindo .esc-nuvem { display: none; }
+.esc.dormindo .esc-sombra { opacity: .28; }
+.esc.dormindo .fumaca path { animation: none; }
+.esc.dormindo .lia-braco-e, .esc.dormindo .lia-braco-d { transform: rotate(-4deg); }
+
+@keyframes esc-rolar { from { transform: translateY(0); } to { transform: translateY(-72px); } }
+@keyframes esc-pisca { 0% { opacity: 1; } 100% { opacity: .25; } }
+@keyframes esc-piscar { 0%, 92%, 100% { transform: translateX(-4px) scaleY(1); } 95% { transform: translateX(-4px) scaleY(.1); } }
+@keyframes esc-digita { from { transform: rotate(0deg) translateY(0); } to { transform: rotate(-5deg) translateY(-3px); } }
+@keyframes esc-balanca { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+@keyframes esc-tremer { 0% { transform: translateX(-1.5px); } 50% { transform: translateX(1.5px); } 100% { transform: translateX(-1.5px); } }
+@keyframes esc-soco { from { transform: translateY(-6px); } to { transform: translateY(1px); } }
+@keyframes esc-vapor { 0% { transform: translateY(0) scale(.6); opacity: .9; } 100% { transform: translateY(-22px) scale(1.4); opacity: 0; } }
+@keyframes esc-pula { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-14px); } 60% { transform: translateY(-14px); } }
+@keyframes esc-acena-e { from { transform: rotate(-12deg); } to { transform: rotate(10deg); } }
+@keyframes esc-acena-d { from { transform: rotate(12deg); } to { transform: rotate(-10deg); } }
+@keyframes esc-confete { 0% { transform: translateY(-10px) rotate(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(70px) rotate(220deg); opacity: 0; } }
+@keyframes esc-cochila { 0%, 100% { transform: rotate(10deg) translateY(4px); } 50% { transform: rotate(13deg) translateY(6px); } }
+@keyframes esc-respira { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.025); } }
+@keyframes esc-zzz { 0% { transform: translate(0, 0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(14px, -26px); opacity: 0; } }
+@keyframes esc-protetor { 0% { transform: translate(-30px, -12px); } 25% { transform: translate(30px, 10px); } 50% { transform: translate(-10px, 18px); } 75% { transform: translate(24px, -18px); } 100% { transform: translate(-30px, -12px); } }
+@keyframes esc-nuvem { from { transform: translateX(-40px); } to { transform: translateX(80px); } }
+@keyframes esc-folha { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes esc-fumaca { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: .7; } 100% { opacity: 0; transform: translateY(-10px); } }
+
+@media (prefers-color-scheme: dark) {
+  .esc-palco { background: #1a2420; }
+  .esc-parede { fill: #22302b; }
+  .esc-chao { fill: #3b3326; }
+  .esc-rodape { fill: #2e271c; }
+  .esc-moldura { fill: #e2e8f0; stroke: #475569; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .esc *, .esc *::before { animation-duration: 0s !important; animation-iteration-count: 1 !important; }
+}

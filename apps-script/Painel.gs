@@ -17,7 +17,7 @@ function doGet() {
 }
 
 function doPost(e) {
-  let req = {};
+  var req = {};
   try { req = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) { req = {}; }
 
   const cache = CacheService.getScriptCache();
@@ -61,7 +61,7 @@ function painelData_(v) {
   if (!v) return '';
   if (v instanceof Date) return Utilities.formatDate(v, TZ, "yyyy-MM-dd'T'HH:mm");
   const s = String(v).trim();
-  let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[ ,]+(?:às\s*)?(\d{1,2})[:h](\d{2})?)?/);
+  var m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[ ,]+(?:às\s*)?(\d{1,2})[:h](\d{2})?)?/);
   if (m) return m[3] + '-' + m[2] + '-' + m[1] + (m[4] ? 'T' + ('0' + m[4]).slice(-2) + ':' + (m[5] || '00') : '');
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
   if (m) return m[1] + '-' + m[2] + '-' + m[3] + (m[4] ? 'T' + m[4] + ':' + m[5] : '');
@@ -75,7 +75,7 @@ function painelDados_() {
   const t = painelTexto_;
 
   const reunioes = painelAba_(ss, 'Reuniões').map(function (r) {
-    let fups = [];
+    var fups = [];
     try { fups = JSON.parse(t(r['Follow-ups JSON']) || '[]'); } catch (err) { fups = []; }
     const doc = t(r['ID Doc Gemini']);
     return {
@@ -115,7 +115,7 @@ function painelDados_() {
   });
 
   const p = PROPS.getProperties();
-  let gatilhos = [];
+  var gatilhos = [];
   try { gatilhos = ScriptApp.getProjectTriggers().map(function (g) { return g.getHandlerFunction(); }); } catch (err) {}
 
   return {

@@ -14,6 +14,7 @@
     carregando: false,
     ultimaCarga: null,
     msgLogin: '',
+    previa: '',      // estado forçado da animação (prévia); vazio = ao vivo
     filtro: { tipo: 'todos', busca: '', ordem: 'recente' }
   };
 
@@ -344,6 +345,28 @@
     return '<div class="cartao vazio">Buscando dados…</div>';
   }
 
+  /* ----- Escritório da Lia (animação) ----- */
+  const HUMOR_ICONE = { trabalhando: '⌨️', raiva: '😠', feliz: '🎉', dormindo: '😴' };
+  const HUMOR_PREVIA = {
+    trabalhando: { titulo: 'Trabalhando agora', detalhe: 'Prévia: é assim quando a Lia está processando reuniões.' },
+    raiva: { titulo: 'Algo deu errado', detalhe: 'Prévia: é assim quando aparece um erro no Histórico.' },
+    feliz: { titulo: 'Relatório enviado!', detalhe: 'Prévia: é assim logo depois que a Lia te manda um relatório.' },
+    dormindo: { titulo: 'Terminou por agora', detalhe: 'Prévia: é assim quando a Lia terminou tudo e está esperando a próxima rotina.' }
+  };
+  function escritorio(L, compacto) {
+    if (!window.Escritorio) return '';
+    const vivo = L ? window.Escritorio.humor(L.bruto.historico) : { estado: 'dormindo', titulo: 'Conectando…', detalhe: '' };
+    const h = estado.previa ? Object.assign({ estado: estado.previa }, HUMOR_PREVIA[estado.previa]) : vivo;
+    const botoes = [['', 'Ao vivo'], ['trabalhando', 'Trabalhando'], ['raiva', 'Erro'], ['feliz', 'Relatório'], ['dormindo', 'Dormindo']].map(function (b) {
+      return '<button data-previa="' + b[0] + '" class="' + (estado.previa === b[0] ? 'ativo' : '') + '">' + b[1] + '</button>';
+    }).join('');
+    return '<div class="cartao esc ' + h.estado + (compacto ? ' compacto' : '') + '">' +
+      '<div class="esc-palco">' + window.Escritorio.svg() + '</div>' +
+      '<div class="esc-legenda"><span class="esc-humor">' + HUMOR_ICONE[h.estado] + '</span>' +
+      '<div style="min-width:0;flex:1"><b>' + esc(h.titulo) + '</b><span class="det">' + esc(h.detalhe || '') + '</span></div>' +
+      '<div class="esc-previa"><small>Ver:</small>' + botoes + '</div></div></div>';
+  }
+
   /* ----- Hub ----- */
   function telaHub() {
     const cards = CFG.robos.map(function (robo) {
@@ -370,6 +393,8 @@
     return topo() + '<main class="pagina">' +
       '<div class="cabeca"><div><h1>' + saudacao() + ', ' + esc((CFG.dono || '').split(' ')[0]) + '</h1>' +
       '<p>O que os robôs estão fazendo por você.</p></div></div>' +
+      '<section style="margin-bottom:24px"><div class="secao-titulo"><h2>Escritório da Lia</h2><a class="sub" href="#/lia">abrir painel →</a></div>' +
+      escritorio(estado.dados.lia, false) + '</section>' +
       '<div class="robos">' + cards + '</div></main>';
   }
   function saudacao() {
@@ -421,6 +446,7 @@
     return topo(mig) + '<main class="pagina">' + avisoErro('lia') +
       '<div class="cabeca"><div><h1>Lia</h1><p>Assistente comercial da Leticia · reuniões, resumos, agenda e CRM</p></div>' +
       '<span class="status ' + s.classe + '">' + esc(s.texto) + '</span></div>' +
+      '<div style="margin-bottom:16px">' + escritorio(L, true) + '</div>' +
       kpis +
       '<section class="secao"><div class="secao-titulo"><h2>Doutores</h2><span class="sub">' + plural(drs.length, 'doutor', 'doutores') + '</span></div>' +
       '<div style="margin-bottom:12px">' + filtros + '</div>' + cards + '</section>' +
@@ -649,6 +675,10 @@
     }
     const ordem = document.getElementById('ordem');
     if (ordem) ordem.onchange = function () { estado.filtro.ordem = ordem.value; desenhar(); };
+    app.querySelectorAll('[data-previa]').forEach(function (b) {
+      b.onclick = function () { estado.previa = b.getAttribute('data-previa'); desenhar(); };
+    });
+    if (window.Escritorio) app.querySelectorAll('.esc').forEach(window.Escritorio.acertarRelogio);
     app.querySelectorAll('tr[data-href]').forEach(function (tr) {
       tr.onclick = function () { location.hash = tr.getAttribute('data-href'); };
     });
@@ -659,6 +689,10 @@
     if (!document.hidden && estado.senha && estado.ultimaCarga && Date.now() - estado.ultimaCarga > ATUALIZA_MS) carregarTudo();
   });
   setInterval(function () { if (!document.hidden && estado.senha) carregarTudo(); }, ATUALIZA_MS);
+  // Humor da Lia e relógio do escritório acompanham o tempo (sem atrapalhar a busca)
+  setInterval(function () {
+    if (!document.hidden && estado.senha && !estado.carregando && (document.activeElement || {}).id !== 'busca') desenhar();
+  }, 60 * 1000);
 
   desenhar();
   if (estado.senha) carregarTudo();
