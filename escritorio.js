@@ -95,7 +95,7 @@
 
   function svg() {
     return '' +
-'<svg class="esc-svg" viewBox="0 0 160 90" shape-rendering="crispEdges" role="img" aria-label="Escritório da Lia" xmlns="http://www.w3.org/2000/svg">' +
+'<svg class="esc-svg" viewBox="32 4 124 78" shape-rendering="crispEdges" role="img" aria-label="Escritório da Lia" xmlns="http://www.w3.org/2000/svg">' +
   '<defs><clipPath id="esc-tela"><rect x="102" y="36" width="30" height="19"/></clipPath></defs>' +
   px(0, 0, 160, 78, 'px-parede') + px(0, 78, 160, 12, 'px-chao') + px(0, 77, 160, 1, 'px-rodape') +
 
