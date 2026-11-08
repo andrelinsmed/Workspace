@@ -339,7 +339,7 @@ tr.clicavel:hover td { background: var(--surface-2); }
 .lia-braco-d, .lia-aceno-d { transform-origin: 100% 0%; }
 .lia-aceno-d { transform-origin: 0% 100%; }
 .lia-aceno-e { transform-origin: 100% 100%; }
-.zzz text { font: 700 16px var(--font); fill: #64748b; }
+.zzz text { font: 700 19px var(--font); fill: #64748b; }
 .vapor circle { fill: #e2e8f0; }
 
 /* ---- trabalhando ---- */

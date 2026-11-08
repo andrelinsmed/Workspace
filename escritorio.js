@@ -110,10 +110,10 @@
     '<rect x="98" y="42" width="4" height="84" class="esc-moldura"/><rect x="42" y="82" width="116" height="4" class="esc-moldura"/>' +
   '</g>' +
   // relógio
-  '<g class="esc-relogio"><circle cx="372" cy="50" r="17" class="esc-moldura"/><circle cx="372" cy="50" r="14" fill="#fff"/>' +
-    '<line class="esc-ponteiro-h" x1="372" y1="50" x2="372" y2="42" stroke="#334155" stroke-width="2.2" stroke-linecap="round"/>' +
-    '<line class="esc-ponteiro-m" x1="372" y1="50" x2="372" y2="39" stroke="#334155" stroke-width="1.4" stroke-linecap="round"/>' +
-    '<circle cx="372" cy="50" r="1.6" fill="#334155"/></g>' +
+  '<g class="esc-relogio"><circle cx="232" cy="48" r="17" class="esc-moldura"/><circle cx="232" cy="48" r="14" fill="#fff"/>' +
+    '<line class="esc-ponteiro-h" x1="232" y1="48" x2="232" y2="40" stroke="#334155" stroke-width="2.2" stroke-linecap="round"/>' +
+    '<line class="esc-ponteiro-m" x1="232" y1="48" x2="232" y2="37" stroke="#334155" stroke-width="1.4" stroke-linecap="round"/>' +
+    '<circle cx="232" cy="48" r="1.6" fill="#334155"/></g>' +
   // prateleira com planta e livros
   '<rect x="450" y="92" width="118" height="5" rx="2" class="esc-madeira"/>' +
   '<g><rect x="466" y="74" width="18" height="18" rx="3" fill="#c2410c"/>' +
@@ -205,8 +205,8 @@
   function acertarRelogio(raiz) {
     const d = new Date();
     const h = raiz.querySelector('.esc-ponteiro-h'), m = raiz.querySelector('.esc-ponteiro-m');
-    if (h) h.setAttribute('transform', 'rotate(' + ((d.getHours() % 12) * 30 + d.getMinutes() / 2) + ' 372 50)');
-    if (m) m.setAttribute('transform', 'rotate(' + d.getMinutes() * 6 + ' 372 50)');
+    if (h) h.setAttribute('transform', 'rotate(' + ((d.getHours() % 12) * 30 + d.getMinutes() / 2) + ' 232 48)');
+    if (m) m.setAttribute('transform', 'rotate(' + d.getMinutes() * 6 + ' 232 48)');
   }
 
   window.Escritorio = { svg: svg, humor: humor, acertarRelogio: acertarRelogio };
