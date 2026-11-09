@@ -69,6 +69,11 @@
     if (!t.length) return '?';
     return (t[0][0] + (t.length > 1 ? t[t.length - 1][0] : '')).toUpperCase();
   }
+  const IC = {
+    atualizar: '<svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>',
+    externo: '<svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>'
+  };
+  function a(an, d) { return ' a" style="--an:' + an + ';--d:' + d + 's'; } // classe de entrada + atraso
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
 
   /* ---------------- API ---------------- */
@@ -284,9 +289,9 @@
         return '<span>/</span>' + (m.href ? '<a href="' + m.href + '">' + esc(m.t) + '</a>' : '<span>' + esc(m.t) + '</span>');
       }).join('') + '</nav>' : '') +
       '<div class="topo-acoes"><span class="atualizado">' + esc(quando) + '</span>' +
-      '<button class="btn btn-icone" data-acao="atualizar" title="Atualizar" ' + (estado.carregando ? 'disabled' : '') + '>↻</button>' +
+      '<button class="btn btn-icone" data-acao="atualizar" title="Atualizar" ' + (estado.carregando ? 'disabled' : '') + '>' + IC.atualizar + '</button>' +
       '<button class="btn" data-acao="sair">Sair</button></div>' +
-      '</div></header>';
+      '</div><div class="progresso' + (estado.carregando ? ' ativo' : '') + '"></div></header>';
   }
 
   function desenhar() {
@@ -299,15 +304,21 @@
     else if (r.robo === 'lia') html = telaLia();
     else html = topo([{ t: 'Não encontrado' }]) + '<main class="pagina"><div class="vazio">Página não encontrada. <a href="#/">Voltar</a></div></main>';
     const y = window.scrollY;
+    const chave = location.hash + '|' + Object.keys(estado.dados).join(',');
     app.innerHTML = html;
+    if (desenhar._chave !== chave) {
+      const main = app.querySelector('main');
+      if (main) main.classList.add('entrar');
+    }
     if (desenhar._rota === location.hash) window.scrollTo(0, y); else window.scrollTo(0, 0);
     desenhar._rota = location.hash;
+    desenhar._chave = chave;
     ligarEventos();
   }
 
   function telaLogin(msg) {
     app.innerHTML = '<div class="login"><form class="cartao login-caixa" id="form-login">' +
-      '<div class="marca-logo">W</div><h1>' + esc(CFG.titulo) + '</h1><p>Painel dos robôs · acesso restrito</p>' +
+      '<div class="marca-logo">W</div><span class="kicker">Acesso restrito</span><h1>Workspace.</h1><p>Painel dos robôs da Crisalix.</p>' +
       '<input id="senha" type="password" inputmode="numeric" autocomplete="current-password" placeholder="••••••" aria-label="Senha" autofocus>' +
       '<button class="btn btn-primario" type="submit">Entrar</button>' +
       '<div class="login-erro" id="login-erro">' + esc(msg) + '</div></form></div>';
@@ -346,7 +357,7 @@
 
   /* ----- Hub ----- */
   function telaHub() {
-    const cards = CFG.robos.map(function (robo) {
+    const cards = CFG.robos.map(function (robo, idx) {
       const ativo = robo.api && !/COLE_AQUI/.test(robo.api);
       const L = estado.dados[robo.id];
       let status = '<span class="status neutro">' + (ativo ? 'Carregando' : 'Em breve') + '</span>';
@@ -364,12 +375,12 @@
         '<div style="min-width:0"><div class="robo-nome">' + esc(robo.nome) + '</div><div class="robo-papel">' + esc(robo.papel || '') + '</div></div>' +
         '<div style="margin-left:auto">' + status + '</div></div>' + numeros;
       return ativo
-        ? '<a class="cartao robo" href="#/' + esc(robo.id) + '">' + corpo + '</a>'
-        : '<div class="cartao robo inativo">' + corpo + '</div>';
+        ? '<a class="cartao robo' + a('fz', .8 + idx * .16) + '" href="#/' + esc(robo.id) + '">' + corpo + '</a>'
+        : '<div class="cartao robo inativo' + a('fz', .8 + idx * .16) + '">' + corpo + '</div>';
     }).join('');
     return topo() + '<main class="pagina">' +
-      '<div class="cabeca"><div><h1>' + saudacao() + ', ' + esc((CFG.dono || '').split(' ')[0]) + '</h1>' +
-      '<p>O que os robôs estão fazendo por você.</p></div></div>' +
+      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Workspace Crisalix · robôs</span><h1 class="' + a('up', .2) + '">' + saudacao() + ', ' + esc((CFG.dono || '').split(' ')[0]) + '.</h1>' +
+      '<p class="lede' + a('up', .6) + '">O que os robôs estão fazendo por você agora.</p></div></div>' +
       '<div class="robos">' + cards + '</div></main>';
   }
   function saudacao() {
@@ -398,7 +409,7 @@
       return (b.ultima.data || '').localeCompare(a.ultima.data || '');
     });
 
-    const kpis = '<div class="kpis">' +
+    const kpis = '<div class="kpis' + a('fz', .7) + '">' +
       kpi('Reuniões · 7 dias', m.reunioes7, plural(m.clientes7, 'com cliente', 'com clientes')) +
       kpi('Appts no mês', m.apptsMes, plural(m.reunioesMes, 'reunião no total', 'reuniões no total')) +
       kpi('Doutores', m.doutores, m.prospects + ' prospects · ' + m.clientes + ' clientes') +
@@ -406,30 +417,31 @@
       kpi('CRM a resolver', m.crmAberto, 'reuniões sem registro ok', m.crmAberto > 0) +
       '</div>';
 
-    const filtros = '<div class="filtros">' +
+    const filtros = '' +
       '<div class="seg" role="tablist">' + [['todos', 'Todos'], ['prospect', 'Prospects'], ['cliente', 'Clientes'], ['pendente', 'Com pendência']].map(function (o) {
         return '<button data-filtro="' + o[0] + '" class="' + (f.tipo === o[0] ? 'ativo' : '') + '">' + o[1] + '</button>';
       }).join('') + '</div>' +
       '<input class="busca" id="busca" type="search" placeholder="Buscar doutor…" value="' + esc(f.busca) + '">' +
       '<select class="busca" id="ordem">' + [['recente', 'Última reunião'], ['pendencia', 'Próxima pendência'], ['nome', 'Nome']].map(function (o) {
         return '<option value="' + o[0] + '"' + (f.ordem === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
-      }).join('') + '</select></div>';
+      }).join('') + '</select>';
 
     const cards = drs.length ? '<div class="drs">' + drs.map(cardDoutor).join('') + '</div>'
       : '<div class="cartao vazio">Nenhum doutor com esse filtro.</div>';
 
     return topo(mig) + '<main class="pagina">' + avisoErro('lia') +
-      '<div class="cabeca"><div><h1>Lia</h1><p>Assistente comercial da Leticia · reuniões, resumos, agenda e CRM</p></div>' +
-      '<span class="status ' + s.classe + '">' + esc(s.texto) + '</span></div>' +
+      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Robô · assistente comercial</span><h1 class="' + a('up', .2) + '">Lia.</h1>' +
+      '<p class="lede' + a('up', .6) + '">Reuniões, resumos, agenda e CRM da Leticia, num só lugar.</p></div>' +
+      '<span class="status ' + s.classe + a('fi', .9) + '">' + esc(s.texto) + '</span></div>' +
       kpis +
-      '<section class="secao"><div class="secao-titulo"><h2>Doutores</h2><span class="sub">' + plural(drs.length, 'doutor', 'doutores') + '</span></div>' +
-      '<div style="margin-bottom:12px">' + filtros + '</div>' + cards + '</section>' +
-      '<section class="secao duas-col">' +
-      '<div><div class="secao-titulo"><h2>Agenda e pendências</h2><span class="sub">atrasadas e próximos 14 dias</span></div>' + blocoAgenda(L) + '</div>' +
-      '<div><div class="secao-titulo"><h2>Status no CRM</h2><span class="sub">reuniões com clientes</span></div>' + blocoCrm(L) +
-      '<div class="secao-titulo" style="margin-top:20px"><h2>Atividade recente</h2></div>' + blocoAtividade(L) + '</div>' +
+      '<section class="secao' + a('up', .9) + '"><div class="secao-titulo"><span class="num">01</span><h2>Doutores.</h2><span class="sub">' + plural(drs.length, 'doutor', 'doutores') + '</span></div>' +
+      '<div class="filtros" style="margin-bottom:24px">' + filtros + '<div class="legenda"><span class="dotc" style="--c:var(--orange)">Prospect</span><span class="dotc" style="--c:var(--teal)">Cliente</span></div></div>' + cards + '</section>' +
+      '<section class="secao duas-col' + a('up', 1.1) + '">' +
+      '<div><div class="secao-titulo"><span class="num">02</span><h2>Agenda e pendências.</h2><span class="sub">atrasadas e próximos 14 dias</span></div>' + blocoAgenda(L) + '</div>' +
+      '<div><div class="secao-titulo"><span class="num">03</span><h2>Status no CRM.</h2><span class="sub">reuniões com clientes</span></div>' + blocoCrm(L) +
+      '<div class="secao-titulo" style="margin-top:40px"><span class="num">04</span><h2>Atividade recente.</h2></div>' + blocoAtividade(L) + '</div>' +
       '</section>' +
-      '<section class="secao"><div class="secao-titulo"><h2>Reuniões</h2><span class="sub">últimas 30</span></div>' + tabelaReunioes(L) + '</section>' +
+      '<section class="secao' + a('up', 1.3) + '"><div class="secao-titulo"><span class="num">05</span><h2>Reuniões.</h2><span class="sub">últimas 30</span></div>' + tabelaReunioes(L) + '</section>' +
       '</main>';
   }
 
@@ -543,8 +555,8 @@
     const hoje = L.hoje;
 
     const acoes = [];
-    if (d.linkCrm) acoes.push('<a class="btn" href="' + esc(d.linkCrm) + '" target="_blank" rel="noopener">Abrir no CRM ↗</a>');
-    if (sel.doc) acoes.push('<a class="btn" href="' + esc(sel.doc) + '" target="_blank" rel="noopener">Transcrição ↗</a>');
+    if (d.linkCrm) acoes.push('<a class="btn" href="' + esc(d.linkCrm) + '" target="_blank" rel="noopener">Abrir no CRM ' + IC.externo + '</a>');
+    if (sel.doc) acoes.push('<a class="btn" href="' + esc(sel.doc) + '" target="_blank" rel="noopener">Transcrição ' + IC.externo + '</a>');
 
     const pend = d.pendencias.length ? '<div class="pend-lista">' + d.pendencias.map(function (p) {
       const atras = p.data && p.data < hoje;
@@ -563,17 +575,15 @@
       '<div><span>Transcrição</span><span>' + esc(sel.stTranscricao || '—') + '</span></div>' +
       '<div><span>Agenda</span><span>' + esc(sel.stAgenda || '—') + '</span></div>' +
       (sel.eventos ? '<div><span>Eventos criados</span><span>' + esc(sel.eventos) + '</span></div>' : '') +
-      (sel.linkFollowupCrm ? '<div><span>Follow-up no CRM</span><span><a href="' + esc(sel.linkFollowupCrm) + '" target="_blank" rel="noopener">abrir ↗</a></span></div>' : '') +
+      (sel.linkFollowupCrm ? '<div><span>Follow-up no CRM</span><span><a href="' + esc(sel.linkFollowupCrm) + '" target="_blank" rel="noopener">abrir</a></span></div>' : '') +
       '</div>';
 
     return topo([{ t: 'Lia', href: '#/lia' }, { t: d.nome }]) + '<main class="pagina">' +
-      '<div class="cartao dr-cabeca"><div class="dr-ini ' + d.status + '">' + esc(iniciais(d.nome)) + '</div>' +
-      '<div style="min-width:0"><h1>' + esc(d.nome) + '</h1>' +
-      '<div class="meta"><span class="etq ' + d.status + '">' + (d.status === 'cliente' ? 'Cliente' : 'Prospect') + '</span>' +
-      '<span>Última reunião ' + esc(fmtData(d.ultima.data)) + ' · ' + esc(relativo(d.ultima.data)) + '</span>' +
-      '<span>' + plural(d.reunioes.length, 'reunião', 'reuniões') + '</span></div></div>' +
+      '<div class="cartao dr-cabeca' + a('fz', .2) + '"><div class="dr-ini ' + d.status + '">' + esc(iniciais(d.nome)) + '</div>' +
+      '<div style="min-width:0"><span class="kicker">' + (d.status === 'cliente' ? 'Cliente' : 'Prospect') + ' · ' + plural(d.reunioes.length, 'reunião', 'reuniões') + '</span><h1>' + esc(d.nome) + '.</h1>' +
+      '<div class="meta"><span>Última reunião ' + esc(fmtData(d.ultima.data)) + ' · ' + esc(relativo(d.ultima.data)) + '</span></div></div>' +
       '<div class="acoes">' + acoes.join('') + '</div></div>' +
-      '<div class="grade-dr">' +
+      '<div class="grade-dr' + a('up', .6) + '">' +
       '<div class="cartao bloco"><h3>' + (sel === d.ultima ? 'Resumo da última reunião' : 'Resumo · ' + esc(fmtData(sel.data))) + '</h3>' +
       '<div class="resumo">' + renderResumo(sel.resumo) + '</div></div>' +
       '<div class="painel-lateral">' +
@@ -591,9 +601,9 @@
     if (!r) return topo([{ t: 'Lia', href: '#/lia' }]) + '<main class="pagina"><div class="cartao vazio">Reunião não encontrada.</div></main>';
     const pend = pendenciasDe(r);
     return topo([{ t: 'Lia', href: '#/lia' }, { t: r.titulo }]) + '<main class="pagina">' +
-      '<div class="cartao dr-cabeca"><div style="min-width:0"><h1>' + esc(r.titulo) + '</h1>' +
+      '<div class="cartao dr-cabeca' + a('fz', .2) + '"><div style="min-width:0"><span class="kicker">Reunião interna</span><h1>' + esc(r.titulo) + '.</h1>' +
       '<div class="meta">' + etqTipo(r) + '<span>' + esc(fmtData(r.data, true)) + ' · ' + esc(relativo(r.data)) + '</span></div></div>' +
-      '<div class="acoes">' + (r.doc ? '<a class="btn" href="' + esc(r.doc) + '" target="_blank" rel="noopener">Transcrição ↗</a>' : '') + '</div></div>' +
+      '<div class="acoes">' + (r.doc ? '<a class="btn" href="' + esc(r.doc) + '" target="_blank" rel="noopener">Transcrição ' + IC.externo + '</a>' : '') + '</div></div>' +
       '<div class="grade-dr"><div class="cartao bloco"><h3>Resumo</h3><div class="resumo">' + renderResumo(r.resumo) + '</div></div>' +
       '<div class="painel-lateral"><div class="cartao bloco"><h3>Follow-ups</h3>' +
       (pend.length ? '<div class="pend-lista">' + pend.map(function (p) {

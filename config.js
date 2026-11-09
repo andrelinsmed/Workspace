@@ -10,14 +10,14 @@ window.WORKSPACE = {
       nome: 'Lia',
       papel: 'Assistente comercial · reuniões, resumos, agenda e CRM',
       api: 'https://script.google.com/macros/s/AKfycbzk5nNV5RA2BOazzcmZ2q1QmwP7B8TkE0EE1O0gtvse05nmqorG1bO8573cNioCPeUc/exec',
-      cor: '#0f766e'
+      cor: '#0071e3'
     },
     {
       id: 'pessoal',
       nome: 'Módulo pessoal',
       papel: 'Próxima etapa da Lia',
       api: null,
-      cor: '#7c3aed'
+      cor: '#6e6e73'
     }
   ]
 };
