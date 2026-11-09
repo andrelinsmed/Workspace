@@ -114,6 +114,30 @@ function painelDados_() {
     };
   });
 
+  // Agenda do Google: hoje + 7 dias (mesmos filtros da Lia: sem recusadas, sem foco/ausência)
+  var agenda = [], agendaErro = '';
+  try {
+    var ini = new Date(); ini.setHours(0, 0, 0, 0);
+    var fim = new Date(ini.getTime() + 8 * 864e5);
+    var res = Calendar.Events.list('primary', { timeMin: ini.toISOString(), timeMax: fim.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 250 });
+    (res.items || []).forEach(function (ev) {
+      if (ev.status === 'cancelled' || (ev.eventType && ev.eventType !== 'default')) return;
+      var eu = (ev.attendees || []).filter(function (a) { return a.self; })[0];
+      if (eu && eu.responseStatus === 'declined') return;
+      var lia = !!(ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.crisId);
+      var tipo = '';
+      try { tipo = lia ? 'Lembrete' : classificar_(ev, ''); } catch (e2) { tipo = ''; }
+      var diaInteiro = !(ev.start && ev.start.dateTime);
+      agenda.push({
+        titulo: ev.summary || '(sem título)',
+        inicio: diaInteiro ? ((ev.start && ev.start.date) || '') : painelData_(new Date(ev.start.dateTime)),
+        fim: diaInteiro ? '' : painelData_(new Date(ev.end.dateTime)),
+        diaInteiro: diaInteiro, tipo: tipo, lia: lia,
+        meet: !!(ev.hangoutLink || ev.conferenceData), link: ev.htmlLink || ''
+      });
+    });
+  } catch (err) { agendaErro = String(err && err.message || err); }
+
   const p = PROPS.getProperties();
   var gatilhos = [];
   try { gatilhos = ScriptApp.getProjectTriggers().map(function (g) { return g.getHandlerFunction(); }); } catch (err) {}
@@ -128,6 +152,8 @@ function painelDados_() {
       retro: { cursor: painelData_(p.RETRO_CURSOR), fim: painelData_(p.RETRO_FIM), pausado: p.RETRO_PAUSADO === 'sim' },
       gatilhos: gatilhos
     },
+    agenda: agenda,
+    agendaErro: agendaErro,
     reunioes: reunioes,
     tarefas: tarefas,
     historico: historico

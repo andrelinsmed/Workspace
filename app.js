@@ -238,10 +238,97 @@
     });
     agenda.sort(function (a, b) { return (a.data || '9').localeCompare(b.data || '9'); });
 
+    // O que a Lia fez por cada doutor nos últimos 7 dias (some depois de 1 semana)
+    const porTitulo = {};
+    reunioes.forEach(function (r) { if (r._dr) porTitulo[normal(r.titulo)] = r._dr; });
+    const porChaveDr = doutores.reduce(function (m, dr) { m[dr.chave] = dr; dr.feitos = []; return m; }, {});
+    (d.historico || []).forEach(function (h) {
+      if (minutosAtras(h.data) > 7 * 1440) return;
+      if (['sucesso', 'concluído', 'não criado'].indexOf(h.resultado) < 0) return;
+      const chave = porTitulo[normal(h.registro)];
+      const texto = textoFeito(h);
+      if (chave && texto && porChaveDr[chave]) porChaveDr[chave].feitos.push({ data: h.data, texto: texto });
+    });
+    doutores.forEach(function (dr) {
+      dr.reunioes.forEach(function (r) {
+        if (r.stResumo === 'ok' && minutosAtras(r.data) <= 7 * 1440) dr.feitos.push({ data: r.data, texto: 'Resumiu a reunião de ' + fmtData(r.data) });
+      });
+      const vistos = {};
+      dr.feitos = dr.feitos.sort(function (a, b) { return b.data.localeCompare(a.data); })
+        .filter(function (f) { if (vistos[f.texto]) return false; vistos[f.texto] = 1; return true; });
+      dr.abertas = dr.pendencias.filter(function (p) { return !p.data || diasEntre(hoje, p.data) >= -7; });
+      dr.emAndamento = dr.feitos.length > 0 || dr.abertas.length > 0;
+    });
+
+    const semana = montarSemana(d, doutores, agenda, hoje);
+
     return {
-      bruto: d, reunioes: reunioes, doutores: doutores, agenda: agenda, hoje: hoje,
+      bruto: d, reunioes: reunioes, doutores: doutores, agenda: agenda, hoje: hoje, semana: semana,
       porChave: doutores.reduce(function (m, dr) { m[dr.chave] = dr; return m; }, {})
     };
+  }
+
+  function normal(s) { return semAcento(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function minutosAtras(iso) { const d = paraData(iso); return d ? (Date.now() - d.getTime()) / 60000 : Infinity; }
+  function textoFeito(h) {
+    const c = h.confirmacao || '';
+    switch (h.operacao) {
+      case 'crm_followup': return 'Registrou o follow-up no CRM';
+      case 'crm_atualizado': return 'Atualizou o registro no CRM';
+      case 'crm_noshow': return 'Registrou o no-show no CRM';
+      case 'crm_duplicidade': return 'Conferiu o CRM: o follow-up já existia';
+      case 'evento_criado': return 'Agendou ' + c.replace(/\s*—.*$/, '').replace(/\/\d{4}/, '');
+      case 'evento_reagendado': return 'Reagendou para ' + c.replace(/\/\d{4}/, '');
+      default: return '';
+    }
+  }
+
+  /* Agenda: eventos do Google Agenda + pendências, de hoje até 7 dias à frente */
+  function montarSemana(d, doutores, agenda, hoje) {
+    const dias = {};
+    for (let i = 0; i <= 7; i++) {
+      const dt = paraData(hoje); dt.setDate(dt.getDate() + i);
+      const iso = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+      dias[iso] = [];
+    }
+    function drDoTexto(txt) {
+      const n = ' ' + normal(txt) + ' ';
+      return doutores.find(function (dr) {
+        const t = tokensNome(dr.nome);
+        const ult = t[t.length - 1];
+        return ult && ult.length >= 4 && n.indexOf(' ' + ult + ' ') >= 0 && (t.length < 2 || n.indexOf(' ' + t[0] + ' ') >= 0 || n.indexOf(' ' + ult + ' ') >= 0);
+      });
+    }
+    (d.agenda || []).forEach(function (ev) {
+      const dia = (ev.inicio || '').slice(0, 10);
+      if (!dias[dia]) return;
+      const tipo = ev.lia ? 'lembrete' : /appt/i.test(ev.tipo) ? 'prospect' : /cliente/i.test(ev.tipo) ? 'cliente' : /intern/i.test(ev.tipo) ? 'interna' : 'outro';
+      const dr = drDoTexto(ev.titulo);
+      dias[dia].push({
+        hora: ev.diaInteiro ? '' : (ev.inicio || '').slice(11, 16), titulo: ev.titulo.replace(/^\S*\s*(?=Tarefas|Follow)/, ''),
+        tipo: tipo, href: dr ? '#/lia/dr/' + encodeURIComponent(dr.chave) : ev.link, externo: !dr, dr: dr ? dr.chave : '', meet: ev.meet
+      });
+    });
+    agenda.forEach(function (p) {
+      if (!p.data || !dias[p.data]) return;
+      // Já existe lembrete da Lia no mesmo dia para o mesmo doutor/reunião? Junta.
+      const igual = dias[p.data].find(function (it) {
+        return it.tipo === 'lembrete' && ((p.dr && it.dr === p.dr) || (!p.dr && normal(it.titulo).indexOf(normal(p.quem)) >= 0));
+      });
+      if (igual) { igual.sub = p.acao; return; }
+      dias[p.data].push({
+        hora: p.hora || '', titulo: p.quem, sub: p.acao, tipo: 'pendencia', estimada: p.estimada,
+        href: p.dr ? '#/lia/dr/' + encodeURIComponent(p.dr) : p.reuniao ? '#/lia/r/' + encodeURIComponent(p.reuniao) : ''
+      });
+    });
+    Object.keys(dias).forEach(function (k) {
+      dias[k].sort(function (a, b) { return (a.hora || '99').localeCompare(b.hora || '99'); });
+    });
+    const atrasadas = agenda.filter(function (p) {
+      const n = p.data ? diasEntre(hoje, p.data) : null;
+      return n !== null && n < 0 && n >= -7;
+    });
+    return { dias: dias, atrasadas: atrasadas, temAgenda: Array.isArray(d.agenda), agendaErro: d.agendaErro || '' };
   }
 
   function metricas(L) {
@@ -304,6 +391,8 @@
     if (!r.robo) html = telaHub();
     else if (r.robo === 'lia' && r.tipo === 'dr') html = telaDoutor(r.id, r.extra);
     else if (r.robo === 'lia' && r.tipo === 'r') html = telaReuniao(r.id);
+    else if (r.robo === 'lia' && r.tipo === 'doutores') html = telaDoutores();
+    else if (r.robo === 'lia' && r.tipo === 'historico') html = telaHistorico();
     else if (r.robo === 'lia') html = telaLia();
     else html = topo([{ t: 'Não encontrado' }]) + '<main class="pagina"><div class="vazio">Página não encontrada. <a href="#/">Voltar</a></div></main>';
     const y = window.scrollY;
@@ -391,60 +480,129 @@
     return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   }
 
-  /* ----- Lia ----- */
+  /* ----- Lia: o essencial (hoje, semana, em andamento) ----- */
+  const DIAS_LONGOS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const TIPO_AG = {
+    prospect: { r: 'Reunião · prospect', c: 'var(--orange)' },
+    cliente: { r: 'Reunião · cliente', c: 'var(--teal)' },
+    interna: { r: 'Interna', c: 'var(--muted)' },
+    outro: { r: 'Evento', c: 'var(--muted)' },
+    lembrete: { r: 'Lembrete da Lia', c: 'var(--blue)' },
+    pendencia: { r: 'Pendência', c: 'var(--blue)' }
+  };
+
+  function itemAgenda(it, compacto) {
+    const tag = it.href ? 'a' : 'div';
+    const attrs = it.href ? ' href="' + esc(it.href) + '"' + (it.externo ? ' target="_blank" rel="noopener"' : '') : '';
+    return '<' + tag + ' class="ag-item' + (compacto ? ' compacto' : '') + '"' + attrs + ' style="--c:' + TIPO_AG[it.tipo].c + '">' +
+      '<span class="ag-hora">' + esc(it.hora || '—') + '</span>' +
+      '<span class="ag-corpo"><span class="ag-titulo">' + esc(it.titulo) + '</span>' +
+      (it.sub ? '<span class="ag-sub">' + esc(it.sub) + (it.estimada ? ' · data de retorno' : '') + '</span>' : '') +
+      (compacto ? '' : '<span class="ag-tipo">' + TIPO_AG[it.tipo].r + '</span>') + '</span></' + tag + '>';
+  }
+
   function telaLia() {
     const L = estado.dados.lia;
     const mig = [{ t: 'Lia' }];
     if (!L) return topo(mig) + '<main class="pagina">' + esperando('lia') + '</main>';
-    const m = metricas(L), s = saudeLia(L);
-    const f = estado.filtro;
+    const s = saudeLia(L), S = L.semana, hoje = L.hoje;
+    const dHoje = paraData(hoje);
+    const itensHoje = S.dias[hoje] || [];
 
+    // Hoje
+    const atras = S.atrasadas.map(function (p) {
+      return '<a class="ag-item atrasada" href="' + (p.dr ? '#/lia/dr/' + encodeURIComponent(p.dr) : p.reuniao ? '#/lia/r/' + encodeURIComponent(p.reuniao) : '#/lia') + '" style="--c:var(--red)">' +
+        '<span class="ag-hora">' + esc(fmtData(p.data)) + '</span><span class="ag-corpo"><span class="ag-titulo">' + esc(p.quem) + '</span><span class="ag-sub">' + esc(p.acao) + '</span><span class="ag-tipo">Atrasada · ' + esc(relativo(p.data)) + '</span></span></a>';
+    }).join('');
+    const blocoHoje = '<div class="cartao hoje' + a('fz', .5) + '">' +
+      '<div class="hoje-data"><span class="kicker">Hoje</span><div class="hoje-dia">' + DIAS_LONGOS[dHoje.getDay()] + ',</div><div class="hoje-num">' + dHoje.getDate() + ' de ' + MESES[dHoje.getMonth()] + '.</div>' +
+      '<div class="hoje-resumo">' + (itensHoje.length ? plural(itensHoje.length, 'compromisso', 'compromissos') : 'Dia livre') + (S.atrasadas.length ? ' · <b>' + plural(S.atrasadas.length, 'atrasada', 'atrasadas') + '</b>' : '') + '</div></div>' +
+      '<div class="hoje-lista">' +
+      (itensHoje.length ? itensHoje.map(function (it) { return itemAgenda(it, false); }).join('') : '<div class="ag-vazio">Nada marcado para hoje.</div>') +
+      (atras ? '<div class="ag-sep">Atrasadas</div>' + atras : '') +
+      '</div></div>';
+
+    // Semana (próximos 7 dias)
+    const chaves = Object.keys(S.dias).filter(function (k) { return k !== hoje; });
+    const blocoSemana = '<div class="semana' + a('up', .8) + '">' + chaves.map(function (k) {
+      const dt = paraData(k), its = S.dias[k];
+      const fim = dt.getDay() === 0 || dt.getDay() === 6;
+      return '<div class="cartao dia' + (fim ? ' fds' : '') + '"><div class="dia-cab"><span>' + DIAS_LONGOS[dt.getDay()].slice(0, 3) + '</span><b>' + dt.getDate() + '</b></div>' +
+        (its.length ? its.map(function (it) { return itemAgenda(it, true); }).join('') : '<div class="ag-vazio">Livre</div>') + '</div>';
+    }).join('') + '</div>';
+    const avisoAgenda = !S.temAgenda
+      ? '<div class="nota">Por enquanto a agenda mostra só as pendências. As suas reuniões do Google Agenda aparecem aqui assim que a nova versão da API for publicada.</div>'
+      : S.agendaErro ? '<div class="nota">Não consegui ler o Google Agenda agora (' + esc(S.agendaErro.slice(0, 120)) + ').</div>' : '';
+    const legenda = '<div class="legenda">' + ['prospect', 'cliente', 'pendencia', 'interna'].map(function (k) {
+      return '<span class="dotc" style="--c:' + TIPO_AG[k].c + '">' + { prospect: 'Prospect', cliente: 'Cliente', pendencia: 'Pendência / lembrete', interna: 'Interna' }[k] + '</span>';
+    }).join('') + '</div>';
+
+    // Em andamento
+    const andamento = L.doutores.filter(function (d) { return d.emAndamento; })
+      .sort(function (x, y) { return ((y.feitos[0] || {}).data || y.ultima.data || '').localeCompare((x.feitos[0] || {}).data || x.ultima.data || ''); });
+
+    return topo(mig) + '<main class="pagina">' + avisoErro('lia') +
+      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Robô · assistente comercial</span><h1 class="' + a('up', .2) + '">Lia.</h1></div>' +
+      '<a class="status ' + s.classe + a('fi', .6) + '" href="#/lia/historico">' + esc(s.texto) + '</a></div>' +
+      blocoHoje +
+      '<section class="secao' + a('up', .7) + '"><div class="secao-titulo"><h2>Sua semana.</h2>' + legenda + '</div>' + avisoAgenda + blocoSemana + '</section>' +
+      '<section class="secao' + a('up', 1) + '"><div class="secao-titulo"><h2>Em andamento.</h2><span class="sub">o que a Lia fez nos últimos 7 dias e o que está aberto</span></div>' +
+      (andamento.length ? '<div class="drs">' + andamento.map(cardDoutor).join('') + '</div>' : '<div class="cartao vazio">Nada em andamento nesta semana.</div>') +
+      '</section>' +
+      '<nav class="rodape-links' + a('fi', 1.2) + '"><a href="#/lia/doutores">Todos os doutores <b>' + L.doutores.length + '</b></a><a href="#/lia/historico">Números, CRM e histórico de reuniões</a></nav>' +
+      '</main>';
+  }
+
+  /* ----- Todos os doutores ----- */
+  function telaDoutores() {
+    const L = estado.dados.lia;
+    const mig = [{ t: 'Lia', href: '#/lia' }, { t: 'Doutores' }];
+    if (!L) return topo(mig) + '<main class="pagina">' + esperando('lia') + '</main>';
+    const f = estado.filtro;
     let drs = L.doutores.filter(function (d) {
       if (f.tipo === 'prospect' && d.status !== 'prospect') return false;
       if (f.tipo === 'cliente' && d.status !== 'cliente') return false;
-      if (f.tipo === 'pendente' && !(d.proxima || d.crmProblema)) return false;
       if (f.busca && semAcento(d.nome).toLowerCase().indexOf(semAcento(f.busca).toLowerCase()) < 0) return false;
       return true;
     });
-    drs.sort(function (a, b) {
-      if (f.ordem === 'pendencia') return ((a.proxima && a.proxima.data) || '9').localeCompare((b.proxima && b.proxima.data) || '9');
-      if (f.ordem === 'nome') return semAcento(a.nome.replace(/^dra?\.\s*/i, '')).localeCompare(semAcento(b.nome.replace(/^dra?\.\s*/i, '')));
-      return (b.ultima.data || '').localeCompare(a.ultima.data || '');
+    drs.sort(function (x, y) {
+      if (f.ordem === 'nome') return semAcento(x.nome.replace(/^dra?\.\s*/i, '')).localeCompare(semAcento(y.nome.replace(/^dra?\.\s*/i, '')));
+      return (y.ultima.data || '').localeCompare(x.ultima.data || '');
     });
+    const filtros = '<div class="seg">' + [['todos', 'Todos'], ['prospect', 'Prospects'], ['cliente', 'Clientes']].map(function (o) {
+      return '<button data-filtro="' + o[0] + '" class="' + (f.tipo === o[0] ? 'ativo' : '') + '">' + o[1] + '</button>';
+    }).join('') + '</div>' +
+      '<input class="busca" id="busca" type="search" placeholder="Buscar doutor…" value="' + esc(f.busca) + '">' +
+      '<select class="busca" id="ordem">' + [['recente', 'Última reunião'], ['nome', 'Nome']].map(function (o) {
+        return '<option value="' + o[0] + '"' + (f.ordem === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+      }).join('') + '</select>';
+    return topo(mig) + '<main class="pagina">' +
+      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Lia · carteira</span><h1 class="' + a('up', .2) + '">Doutores.</h1></div></div>' +
+      '<div class="filtros' + a('fi', .5) + '" style="margin-bottom:24px">' + filtros + '<div class="legenda"><span class="dotc" style="--c:var(--orange)">Prospect</span><span class="dotc" style="--c:var(--teal)">Cliente</span></div></div>' +
+      (drs.length ? '<div class="drs' + a('up', .6) + '">' + drs.map(cardDoutor).join('') + '</div>' : '<div class="cartao vazio">Nenhum doutor com esse filtro.</div>') +
+      '</main>';
+  }
 
-    const kpis = '<div class="kpis' + a('fz', .7) + '">' +
+  /* ----- Números e histórico ----- */
+  function telaHistorico() {
+    const L = estado.dados.lia;
+    const mig = [{ t: 'Lia', href: '#/lia' }, { t: 'Histórico' }];
+    if (!L) return topo(mig) + '<main class="pagina">' + esperando('lia') + '</main>';
+    const m = metricas(L), s = saudeLia(L);
+    const kpis = '<div class="kpis' + a('fz', .5) + '">' +
       kpi('Reuniões · 7 dias', m.reunioes7, plural(m.clientes7, 'com cliente', 'com clientes')) +
       kpi('Appts no mês', m.apptsMes, plural(m.reunioesMes, 'reunião no total', 'reuniões no total')) +
       kpi('Doutores', m.doutores, m.prospects + ' prospects · ' + m.clientes + ' clientes') +
-      kpi('Follow-ups · 7 dias', m.prox7, m.atrasadas ? plural(m.atrasadas, 'atrasado', 'atrasados') : 'nada atrasado', m.atrasadas > 0) +
       kpi('CRM a resolver', m.crmAberto, 'reuniões sem registro ok', m.crmAberto > 0) +
       '</div>';
-
-    const filtros = '' +
-      '<div class="seg" role="tablist">' + [['todos', 'Todos'], ['prospect', 'Prospects'], ['cliente', 'Clientes'], ['pendente', 'Com pendência']].map(function (o) {
-        return '<button data-filtro="' + o[0] + '" class="' + (f.tipo === o[0] ? 'ativo' : '') + '">' + o[1] + '</button>';
-      }).join('') + '</div>' +
-      '<input class="busca" id="busca" type="search" placeholder="Buscar doutor…" value="' + esc(f.busca) + '">' +
-      '<select class="busca" id="ordem">' + [['recente', 'Última reunião'], ['pendencia', 'Próxima pendência'], ['nome', 'Nome']].map(function (o) {
-        return '<option value="' + o[0] + '"' + (f.ordem === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
-      }).join('') + '</select>';
-
-    const cards = drs.length ? '<div class="drs">' + drs.map(cardDoutor).join('') + '</div>'
-      : '<div class="cartao vazio">Nenhum doutor com esse filtro.</div>';
-
-    return topo(mig) + '<main class="pagina">' + avisoErro('lia') +
-      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Robô · assistente comercial</span><h1 class="' + a('up', .2) + '">Lia.</h1>' +
-      '<p class="lede' + a('up', .6) + '">Reuniões, resumos, agenda e CRM da Leticia, num só lugar.</p></div>' +
-      '<span class="status ' + s.classe + a('fi', .9) + '">' + esc(s.texto) + '</span></div>' +
-      kpis +
-      '<section class="secao' + a('up', .9) + '"><div class="secao-titulo"><span class="num">01</span><h2>Doutores.</h2><span class="sub">' + plural(drs.length, 'doutor', 'doutores') + '</span></div>' +
-      '<div class="filtros" style="margin-bottom:24px">' + filtros + '<div class="legenda"><span class="dotc" style="--c:var(--orange)">Prospect</span><span class="dotc" style="--c:var(--teal)">Cliente</span></div></div>' + cards + '</section>' +
-      '<section class="secao duas-col' + a('up', 1.1) + '">' +
-      '<div><div class="secao-titulo"><span class="num">02</span><h2>Agenda e pendências.</h2><span class="sub">atrasadas e próximos 14 dias</span></div>' + blocoAgenda(L) + '</div>' +
-      '<div><div class="secao-titulo"><span class="num">03</span><h2>Status no CRM.</h2><span class="sub">reuniões com clientes</span></div>' + blocoCrm(L) +
-      '<div class="secao-titulo" style="margin-top:40px"><span class="num">04</span><h2>Atividade recente.</h2></div>' + blocoAtividade(L) + '</div>' +
-      '</section>' +
-      '<section class="secao' + a('up', 1.3) + '"><div class="secao-titulo"><span class="num">05</span><h2>Reuniões.</h2><span class="sub">últimas 30</span></div>' + tabelaReunioes(L) + '</section>' +
+    return topo(mig) + '<main class="pagina">' +
+      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Lia · números</span><h1 class="' + a('up', .2) + '">Histórico.</h1></div>' +
+      '<span class="status ' + s.classe + a('fi', .6) + '">' + esc(s.texto) + '</span></div>' + kpis +
+      '<section class="secao duas-col' + a('up', .8) + '">' +
+      '<div><div class="secao-titulo"><h2>Status no CRM.</h2></div>' + blocoCrm(L) + '</div>' +
+      '<div><div class="secao-titulo"><h2>Atividade recente.</h2></div>' + blocoAtividade(L) + '</div></section>' +
+      '<section class="secao' + a('up', 1) + '"><div class="secao-titulo"><h2>Reuniões.</h2><span class="sub">últimas 30</span></div>' + tabelaReunioes(L) + '</section>' +
       '</main>';
   }
 
@@ -454,26 +612,22 @@
   }
 
   function cardDoutor(d) {
-    const p = d.proxima;
-    const pend = p
-      ? '<span class="dr-pend' + (d.atrasada ? ' atrasada' : '') + '">' + esc(p.acao) + (p.data ? ' <span style="white-space:nowrap">· ' + esc(fmtData(p.data)) + (d.atrasada ? ' (atrasada)' : '') + '</span>' : '') + '</span>'
-      : '<span class="r">Nenhuma</span>';
-    const etqs = [];
-    if (d.crmProblema) etqs.push('<span class="etq ' + (d.crmProblema === 'erro' ? 'erro' : 'alerta') + '">CRM: ' + esc(d.crmProblema) + '</span>');
-    else if (d.semCrm) etqs.push('<span class="etq neutro">Sem registro no CRM</span>');
-    if (d.ultima.stTranscricao && d.ultima.stTranscricao !== 'ok') etqs.push('<span class="etq neutro">Sem transcrição</span>');
+    const p = d.proxima && (!d.proxima.data || diasEntre(L_hoje(), d.proxima.data) >= -7) ? d.proxima : null;
+    const atras = p && p.data && p.data < L_hoje();
+    const feitos = (d.feitos || []).slice(0, 3);
     return '<a class="cartao dr" href="#/lia/dr/' + encodeURIComponent(d.chave) + '">' +
       '<div class="dr-topo"><div class="dr-ini ' + d.status + '">' + esc(iniciais(d.nome)) + '</div>' +
       '<div style="min-width:0;flex:1"><div class="dr-nome">' + esc(d.nome) + '</div>' +
-      '<div class="dr-sub">' + plural(d.reunioes.length, 'reunião', 'reuniões') + '</div></div>' +
+      '<div class="dr-sub">Última reunião ' + esc(fmtData(d.ultima.data)) + ' · ' + esc(relativo(d.ultima.data)) + '</div></div>' +
       '<span class="etq ' + d.status + '">' + (d.status === 'cliente' ? 'Cliente' : 'Prospect') + '</span></div>' +
-      '<div class="dr-linhas">' +
-      '<div class="dr-linha"><span class="r">Última reunião</span><span>' + esc(fmtData(d.ultima.data)) + ' <span class="r">· ' + esc(relativo(d.ultima.data)) + '</span></span></div>' +
-      '<div class="dr-linha"><span class="r">Pendência</span>' + pend + '</div>' +
-      '</div>' +
-      (etqs.length ? '<div class="dr-rodape">' + etqs.join('') + '</div>' : '') +
+      (p ? '<div class="dr-prox' + (atras ? ' atrasada' : '') + '"><span class="kicker">' + (atras ? 'Atrasada' : 'Próximo passo') + (p.data ? ' · ' + esc(diaSemana(p.data)) + ' ' + esc(fmtData(p.data)) : '') + '</span>' + esc(p.acao) + '</div>' : '') +
+      (feitos.length ? '<div class="dr-feitos">' + feitos.map(function (f) {
+        return '<div class="feito"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg><span>' + esc(f.texto) + '</span><span class="quando-f">' + esc(relativo(f.data)) + '</span></div>';
+      }).join('') + '</div>' : '') +
+      (d.crmProblema === 'erro' ? '<div class="dr-rodape"><span class="etq erro">Erro no CRM</span></div>' : '') +
       '</a>';
   }
+  function L_hoje() { return (estado.dados.lia && estado.dados.lia.hoje) || hojeISO(); }
 
   function blocoAgenda(L) {
     const hoje = L.hoje;
