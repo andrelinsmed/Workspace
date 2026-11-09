@@ -14,6 +14,7 @@
     carregando: false,
     ultimaCarga: null,
     msgLogin: '',
+    editando: null,  // pendência em edição: { rid, i }
     filtro: { tipo: 'todos', busca: '', ordem: 'recente' }
   };
 
@@ -71,16 +72,18 @@
   }
   const IC = {
     atualizar: '<svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>',
+    check: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg>',
+    lapis: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
     externo: '<svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>'
   };
   function a(an, d) { return ' a" style="--an:' + an + ';--d:' + d + 's'; } // classe de entrada + atraso
   function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
 
   /* ---------------- API ---------------- */
-  async function chamar(robo, acao) {
+  async function chamar(robo, acao, extra) {
     const r = await fetch(robo.api, {
       method: 'POST',
-      body: JSON.stringify({ senha: estado.senha, acao: acao }), // text/plain: sem preflight de CORS
+      body: JSON.stringify(Object.assign({}, extra || {}, { senha: estado.senha, acao: acao })), // text/plain: sem preflight de CORS
       redirect: 'follow'
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -110,6 +113,48 @@
     estado.carregando = false;
     estado.ultimaCarga = new Date();
     desenhar();
+  }
+
+  function focarEdicao() {
+    const t = document.getElementById('ed-acao');
+    if (t) { t.focus(); t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+
+  /* Envia uma ação de escrita para a Lia e recarrega os dados */
+  async function acaoPainel(payload, botao) {
+    const robo = CFG.robos.find(function (r) { return r.id === 'lia'; });
+    const original = botao.innerHTML;
+    botao.disabled = true; botao.textContent = 'Salvando…';
+    try {
+      const d = await chamar(robo, payload.acao, payload);
+      if (d.ok && d.reunioes) { // versão antiga da API devolveu os dados em vez de executar a ação
+        aviso('A API da Lia ainda está na versão antiga. Publique a nova versão no Apps Script e tente de novo.', true);
+        botao.disabled = false; botao.innerHTML = original;
+        return;
+      }
+      if (!d.ok) {
+        if (d.erro === 'senha') { sair('A senha mudou. Entre de novo.'); return; }
+        if (d.erro === 'metodo' || d.erro === undefined) aviso('A API ainda não tem essa função. Publique a nova versão no Apps Script.', true);
+        else aviso(d.msg || 'Não deu certo.', true);
+        botao.disabled = false; botao.innerHTML = original;
+        return;
+      }
+      estado.editando = null;
+      aviso([d.msg, d.agenda].filter(Boolean).join(' '));
+      await carregarTudo();
+    } catch (e) {
+      aviso('Sem conexão com a Lia agora (' + e.message + ').', true);
+      botao.disabled = false; botao.innerHTML = original;
+    }
+  }
+
+  function aviso(msg, erro) {
+    let t = document.getElementById('toast');
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+    t.className = 'toast mostrar' + (erro ? ' erro' : '');
+    t.textContent = msg;
+    clearTimeout(aviso._t);
+    aviso._t = setTimeout(function () { t.className = 'toast' + (erro ? ' erro' : ''); }, 5000);
   }
 
   function sair(msg) {
@@ -160,14 +205,15 @@
   const CRM_OK = ['ok', 'já existia', 'liberado', 'ignorado', 'dispensado', 'pausado'];
 
   function pendenciasDe(r) {
-    let itens = (r.followups || []).map(function (f) {
-      return { acao: f.acao || '', data: f.data || '', hora: f.hora || '', combinado: !!f.combinado };
-    }).filter(function (f) { return f.acao; });
-    if (!itens.length && r.followup) {
+    const temJson = (r.followups || []).length > 0;
+    let itens = (r.followups || []).map(function (f, i) {
+      return { acao: (f && f.acao) || '', data: (f && f.data) || '', hora: (f && f.hora) || '', combinado: !!(f && f.combinado), feito: !!(f && f.feito), feitoEm: (f && f.feitoEm) || '', i: i, rid: r.id };
+    }).filter(function (f) { return f.acao && !f.feito; });
+    if (!temJson && r.followup) {
       itens = r.followup.split(/\n+/).map(function (l) { return l.replace(/^[•\-*]\s*/, '').trim(); })
-        .filter(Boolean).map(function (l) {
+        .filter(Boolean).map(function (l, i) {
           const m = l.match(/\((\d{4}-\d{2}-\d{2})/);
-          return { acao: l.replace(/\s*\(\d{4}-\d{2}-\d{2}[^)]*\)\s*$/, ''), data: m ? m[1] : '', combinado: /combinado/.test(l) };
+          return { acao: l.replace(/\s*\(\d{4}-\d{2}-\d{2}[^)]*\)\s*$/, ''), data: m ? m[1] : '', combinado: /combinado/.test(l), i: i, rid: r.id };
         });
     }
     // Sem data própria: usa a data de retorno da reunião
@@ -223,13 +269,13 @@
     const agenda = [];
     doutores.forEach(function (dr) {
       dr.pendencias.forEach(function (p) {
-        if (p.data) agenda.push({ data: p.data, hora: p.hora, acao: p.acao, quem: dr.nome, dr: dr.chave, status: dr.status, estimada: p.estimada });
+        if (p.data) agenda.push({ data: p.data, hora: p.hora, acao: p.acao, quem: dr.nome, dr: dr.chave, status: dr.status, estimada: p.estimada, rid: p.rid, i: p.i });
       });
     });
     reunioes.filter(ehInterna).forEach(function (r) {
       if (diasEntre(r.data, hoje) > 30) return;
       pendenciasDe(r).forEach(function (p) {
-        if (p.data) agenda.push({ data: p.data, hora: p.hora, acao: p.acao, quem: r.titulo, reuniao: r.id, status: 'interna', estimada: p.estimada });
+        if (p.data) agenda.push({ data: p.data, hora: p.hora, acao: p.acao, quem: r.titulo, reuniao: r.id, status: 'interna', estimada: p.estimada, rid: p.rid, i: p.i });
       });
     });
     (d.tarefas || []).forEach(function (t) {
@@ -252,6 +298,9 @@
     doutores.forEach(function (dr) {
       dr.reunioes.forEach(function (r) {
         if (r.stResumo === 'ok' && minutosAtras(r.data) <= 7 * 1440) dr.feitos.push({ data: r.data, texto: 'Resumiu a reunião de ' + fmtData(r.data) });
+        (r.followups || []).forEach(function (f) {
+          if (f && f.feito && f.feitoEm && minutosAtras(f.feitoEm) <= 7 * 1440) dr.feitos.push({ data: f.feitoEm, texto: 'Você concluiu: ' + f.acao, voce: true });
+        });
       });
       const vistos = {};
       dr.feitos = dr.feitos.sort(function (a, b) { return b.data.localeCompare(a.data); })
@@ -304,7 +353,16 @@
       if (!dias[dia]) return;
       const tipo = ev.lia ? 'lembrete' : /appt/i.test(ev.tipo) ? 'prospect' : /cliente/i.test(ev.tipo) ? 'cliente' : /intern/i.test(ev.tipo) ? 'interna' : 'outro';
       const dr = drDoTexto(ev.titulo);
-      dias[dia].push({
+      // Lia trabalhando: a reunião já terminou (últimas 24 h) e ela ainda não fechou resumo/CRM, ou mexeu nela há pouco
+      let trabalhando = false;
+      if (tipo !== 'lembrete' && tipo !== 'outro' && ev.fim && minutosAtras(ev.fim) >= 0 && minutosAtras(ev.fim) <= 24 * 60) {
+        const r = (d.reunioes || []).find(function (x) { return ev.id && (x.id === ev.id || x.id.indexOf(ev.id) === 0); });
+        const recente = r && (d.historico || []).some(function (h) { return h.registro === r.titulo && minutosAtras(h.data) <= 15; });
+        const pronto = r && r.stResumo === 'ok' && (/intern/i.test(r.tipo) || CRM_OK.indexOf(r.stCrm) >= 0);
+        const semGravacao = r && r.stTranscricao === 'sem anexo';
+        trabalhando = recente || (!semGravacao && !pronto);
+      }
+      dias[dia].push({ trabalhando: trabalhando,
         hora: ev.diaInteiro ? '' : (ev.inicio || '').slice(11, 16), titulo: ev.titulo.replace(/^\S*\s*(?=Tarefas|Follow)/, ''),
         tipo: tipo, href: dr ? '#/lia/dr/' + encodeURIComponent(dr.chave) : ev.link, externo: !dr, dr: dr ? dr.chave : '', meet: ev.meet
       });
@@ -315,9 +373,9 @@
       const igual = dias[p.data].find(function (it) {
         return it.tipo === 'lembrete' && ((p.dr && it.dr === p.dr) || (!p.dr && normal(it.titulo).indexOf(normal(p.quem)) >= 0));
       });
-      if (igual) { igual.sub = p.acao; return; }
+      if (igual) { igual.sub = p.acao; igual.rid = p.rid; igual.i = p.i; igual.atual = p.acao; igual.reuniao = p.reuniao; return; }
       dias[p.data].push({
-        hora: p.hora || '', titulo: p.quem, sub: p.acao, tipo: 'pendencia', estimada: p.estimada,
+        hora: p.hora || '', titulo: p.quem, sub: p.acao, tipo: 'pendencia', estimada: p.estimada, rid: p.rid, i: p.i, atual: p.acao, dr: p.dr, reuniao: p.reuniao,
         href: p.dr ? '#/lia/dr/' + encodeURIComponent(p.dr) : p.reuniao ? '#/lia/r/' + encodeURIComponent(p.reuniao) : ''
       });
     });
@@ -492,14 +550,28 @@
     pendencia: { r: 'Pendência', c: 'var(--blue)' }
   };
 
+  const SELO_LIA = '<span class="selo-lia" title="A Lia está trabalhando neste compromisso"><span class="selo-pulso"></span><span class="selo-txt">Lia trabalhando</span></span>';
+
+  function botoesPendencia(rid, i, atual, dr, reuniao) {
+    if (rid == null || i == null) return '';
+    const destino = dr ? '#/lia/dr/' + encodeURIComponent(dr) : reuniao ? '#/lia/r/' + encodeURIComponent(reuniao) : '';
+    return '<span class="acoes-p">' +
+      '<button class="btn-p" data-concluir="1" data-rid="' + esc(rid) + '" data-i="' + i + '" data-atual="' + esc(atual) + '">' + IC.check + 'Concluir</button>' +
+      '<button class="btn-p" data-corrigir="1" data-rid="' + esc(rid) + '" data-i="' + i + '" data-destino="' + esc(destino) + '">' + IC.lapis + 'Corrigir</button></span>';
+  }
+
   function itemAgenda(it, compacto) {
-    const tag = it.href ? 'a' : 'div';
-    const attrs = it.href ? ' href="' + esc(it.href) + '"' + (it.externo ? ' target="_blank" rel="noopener"' : '') : '';
-    return '<' + tag + ' class="ag-item' + (compacto ? ' compacto' : '') + '"' + attrs + ' style="--c:' + TIPO_AG[it.tipo].c + '">' +
+    const titulo = it.href
+      ? '<a class="ag-titulo" href="' + esc(it.href) + '"' + (it.externo ? ' target="_blank" rel="noopener"' : '') + '>' + esc(it.titulo) + '</a>'
+      : '<span class="ag-titulo">' + esc(it.titulo) + '</span>';
+    return '<div class="ag-item' + (compacto ? ' compacto' : '') + (it.trabalhando ? ' com-selo' : '') + '" style="--c:' + TIPO_AG[it.tipo].c + '">' +
+      (it.trabalhando ? SELO_LIA : '') +
       (compacto && !it.hora ? '' : '<span class="ag-hora">' + esc(it.hora || '—') + '</span>') +
-      '<span class="ag-corpo"><span class="ag-titulo">' + esc(it.titulo) + '</span>' +
+      '<span class="ag-corpo">' + titulo +
       (it.sub ? '<span class="ag-sub">' + esc(it.sub) + (it.estimada ? ' · data de retorno' : '') + '</span>' : '') +
-      (compacto ? '' : '<span class="ag-tipo">' + TIPO_AG[it.tipo].r + '</span>') + '</span></' + tag + '>';
+      (compacto ? '' : '<span class="ag-tipo">' + TIPO_AG[it.tipo].r + '</span>') +
+      (compacto ? '' : botoesPendencia(it.rid, it.i, it.atual, it.dr, it.reuniao)) +
+      '</span></div>';
   }
 
   function telaLia() {
@@ -512,8 +584,10 @@
 
     // Hoje
     const atras = S.atrasadas.map(function (p) {
-      return '<a class="ag-item atrasada" href="' + (p.dr ? '#/lia/dr/' + encodeURIComponent(p.dr) : p.reuniao ? '#/lia/r/' + encodeURIComponent(p.reuniao) : '#/lia') + '" style="--c:var(--red)">' +
-        '<span class="ag-hora">' + esc(fmtData(p.data)) + '</span><span class="ag-corpo"><span class="ag-titulo">' + esc(p.quem) + '</span><span class="ag-sub">' + esc(p.acao) + '</span><span class="ag-tipo">Atrasada · ' + esc(relativo(p.data)) + '</span></span></a>';
+      const href = p.dr ? '#/lia/dr/' + encodeURIComponent(p.dr) : p.reuniao ? '#/lia/r/' + encodeURIComponent(p.reuniao) : '#/lia';
+      return '<div class="ag-item atrasada" style="--c:var(--red)">' +
+        '<span class="ag-hora">' + esc(fmtData(p.data)) + '</span><span class="ag-corpo"><a class="ag-titulo" href="' + href + '">' + esc(p.quem) + '</a><span class="ag-sub">' + esc(p.acao) + '</span><span class="ag-tipo">Atrasada · ' + esc(relativo(p.data)) + '</span>' +
+        botoesPendencia(p.rid, p.i, p.acao, p.dr, p.reuniao) + '</span></div>';
     }).join('');
     const blocoHoje = '<div class="cartao hoje' + a('fz', .5) + '">' +
       '<div class="hoje-data"><span class="kicker">Hoje</span><div class="hoje-dia">' + DIAS_LONGOS[dHoje.getDay()] + ',</div><div class="hoje-num">' + dHoje.getDate() + ' de ' + MESES[dHoje.getMonth()] + '.</div>' +
@@ -702,6 +776,45 @@
     return '<span class="etq ' + (st === 'erro' ? 'erro' : 'alerta') + '">' + esc(st) + '</span>';
   }
 
+  /* Pendências com Concluir / Corrigir (edição na própria linha) */
+  function listaPendencias(lista, hoje) {
+    if (!lista.length) return '<div style="color:var(--muted);font-size:14.5px">Nenhuma pendência aberta.</div>';
+    return '<div class="pend-lista">' + lista.map(function (p) {
+      const atras = p.data && p.data < hoje && !p.estimada;
+      const ed = estado.editando && estado.editando.rid === p.rid && estado.editando.i === p.i;
+      if (ed) {
+        return '<div class="pend editando"><span class="bola"></span><div class="pend-form">' +
+          '<label class="kicker" for="ed-acao">O que fazer</label><textarea id="ed-acao" rows="3">' + esc(p.acao) + '</textarea>' +
+          '<label class="kicker" for="ed-data">Data</label><input id="ed-data" type="date" value="' + esc(p.estimada ? '' : (p.data || '')) + '">' +
+          '<div class="pend-botoes"><button class="btn btn-primario" data-salvar="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '" data-atual="' + esc(p.acao) + '">Salvar</button>' +
+          '<button class="btn" data-cancelar="1">Cancelar</button></div>' +
+          '<div class="pend-dica">Se tiver lembrete da Lia na agenda, ele muda de dia junto.</div></div></div>';
+      }
+      return '<div class="pend' + (atras ? ' atrasada' : '') + '"><span class="bola"></span><div>' + esc(p.acao) +
+        (p.data ? '<div class="d">' + esc(diaSemana(p.data)) + ' ' + esc(fmtData(p.data)) + (p.hora ? ' às ' + esc(p.hora) : '') + ' · ' + esc(relativo(p.data)) +
+          (p.estimada ? ' · data de retorno' : p.combinado ? ' · combinado' : '') + '</div>' : '') +
+        (p.rid != null ? '<span class="acoes-p">' +
+          '<button class="btn-p" data-concluir="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '" data-atual="' + esc(p.acao) + '">' + IC.check + 'Concluir</button>' +
+          '<button class="btn-p" data-editar="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '">' + IC.lapis + 'Corrigir</button></span>' : '') +
+        '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  /* Reuniões do doutor que precisam de correção no CRM */
+  function blocoCorrigirCrm(d) {
+    const ruins = d.reunioes.filter(function (r) { return ['erro', 'verificar', 'aguardando você'].indexOf(r.stCrm) >= 0; });
+    if (!ruins.length) return '';
+    return '<div class="cartao bloco crm-corrigir"><h3>CRM precisa de você</h3>' + ruins.map(function (r) {
+      const dica = r.stCrm === 'aguardando você' ? 'A Lia não achou o cadastro. Cole o link do cadastro no CRM.'
+        : r.stCrm === 'erro' ? 'O CRM recusou o registro. Pode tentar de novo; se souber o cadastro certo, cole o link.'
+        : 'A Lia ficou em dúvida se o registro entrou. Confira e libere de novo se precisar.';
+      return '<div class="crm-item"><div class="crm-tit">' + esc(fmtData(r.data)) + ' · ' + esc(r.titulo) + ' ' + etqCrm(r.stCrm) + '</div>' +
+        '<div class="pend-dica">' + dica + '</div>' +
+        '<input class="busca crm-link" type="url" placeholder="https://manager.crisalix.com/surgeons/…" value="' + esc(/surgeons\/\d+/.test(r.linkCrm) ? r.linkCrm : '') + '" data-link-de="' + esc(r.id) + '">' +
+        '<button class="btn btn-primario" data-crm="1" data-rid="' + esc(r.id) + '">Registrar de novo</button></div>';
+    }).join('') + '</div>';
+  }
+
   /* ----- Detalhe do doutor ----- */
   function telaDoutor(chave, reuniaoId) {
     const L = estado.dados.lia;
@@ -715,12 +828,7 @@
     if (d.linkCrm) acoes.push('<a class="btn" href="' + esc(d.linkCrm) + '" target="_blank" rel="noopener">Abrir no CRM ' + IC.externo + '</a>');
     if (sel.doc) acoes.push('<a class="btn" href="' + esc(sel.doc) + '" target="_blank" rel="noopener">Transcrição ' + IC.externo + '</a>');
 
-    const pend = d.pendencias.length ? '<div class="pend-lista">' + d.pendencias.map(function (p) {
-      const atras = p.data && p.data < hoje;
-      return '<div class="pend' + (atras ? ' atrasada' : '') + '"><span class="bola"></span><div>' + esc(p.acao) +
-        (p.data ? '<div class="d">' + esc(diaSemana(p.data)) + ' ' + esc(fmtData(p.data)) + (p.hora ? ' às ' + esc(p.hora) : '') + ' · ' + esc(relativo(p.data)) +
-          (p.estimada ? ' · data de retorno' : p.combinado ? ' · combinado' : '') + '</div>' : '') + '</div></div>';
-    }).join('') + '</div>' : '<div style="color:var(--muted);font-size:13.5px">Nenhuma pendência na última reunião.</div>';
+    const pend = listaPendencias(d.pendencias, hoje);
 
     const linha = '<div class="linha-tempo">' + d.reunioes.map(function (r) {
       return '<a class="lt-item' + (r === sel ? ' atual' : '') + '" href="#/lia/dr/' + encodeURIComponent(d.chave) + '/' + encodeURIComponent(r.id) + '" style="color:inherit;text-decoration:none">' +
@@ -745,6 +853,7 @@
       '<div class="resumo">' + renderResumo(sel.resumo) + '</div></div>' +
       '<div class="painel-lateral">' +
       '<div class="cartao bloco"><h3>Pendências</h3>' + pend + '</div>' +
+      blocoCorrigirCrm(d) +
       '<div class="cartao bloco"><h3>Reuniões</h3>' + linha + '</div>' +
       '<div class="cartao bloco"><h3>Registro</h3>' + dados + '</div>' +
       '</div></div></main>';
@@ -757,15 +866,14 @@
     const r = L.reunioes.find(function (x) { return x.id === id; });
     if (!r) return topo([{ t: 'Lia', href: '#/lia' }]) + '<main class="pagina"><div class="cartao vazio">Reunião não encontrada.</div></main>';
     const pend = pendenciasDe(r);
+    const pendHtml = listaPendencias(pend, L.hoje);
     return topo([{ t: 'Lia', href: '#/lia' }, { t: r.titulo }]) + '<main class="pagina">' +
       '<div class="cartao dr-cabeca' + a('fz', .2) + '"><div style="min-width:0"><span class="kicker">Reunião interna</span><h1>' + esc(r.titulo) + '.</h1>' +
       '<div class="meta">' + etqTipo(r) + '<span>' + esc(fmtData(r.data, true)) + ' · ' + esc(relativo(r.data)) + '</span></div></div>' +
       '<div class="acoes">' + (r.doc ? '<a class="btn" href="' + esc(r.doc) + '" target="_blank" rel="noopener">Transcrição ' + IC.externo + '</a>' : '') + '</div></div>' +
       '<div class="grade-dr"><div class="cartao bloco"><h3>Resumo</h3><div class="resumo">' + renderResumo(r.resumo) + '</div></div>' +
       '<div class="painel-lateral"><div class="cartao bloco"><h3>Follow-ups</h3>' +
-      (pend.length ? '<div class="pend-lista">' + pend.map(function (p) {
-        return '<div class="pend"><span class="bola"></span><div>' + esc(p.acao) + (p.data ? '<div class="d">' + esc(fmtData(p.data)) + '</div>' : '') + '</div></div>';
-      }).join('') + '</div>' : '<div style="color:var(--muted);font-size:13.5px">Nenhum.</div>') +
+      pendHtml +
       '</div></div></div></main>';
   }
 
@@ -814,6 +922,39 @@
         nb.focus(); try { nb.setSelectionRange(pos, pos); } catch (e) {}
       };
     }
+    app.querySelectorAll('[data-concluir]').forEach(function (b) {
+      b.onclick = function () {
+        if (!b.classList.contains('confirmar')) {
+          b.classList.add('confirmar'); b.lastChild.textContent = 'Confirmar?';
+          setTimeout(function () { if (b.isConnected) { b.classList.remove('confirmar'); b.lastChild.textContent = 'Concluir'; } }, 4000);
+          return;
+        }
+        acaoPainel({ acao: 'pendencia', op: 'concluir', reuniaoId: b.dataset.rid, indice: +b.dataset.i, atual: b.dataset.atual }, b);
+      };
+    });
+    app.querySelectorAll('[data-editar]').forEach(function (b) {
+      b.onclick = function () { estado.editando = { rid: b.dataset.rid, i: +b.dataset.i }; desenhar(); focarEdicao(); };
+    });
+    app.querySelectorAll('[data-corrigir]').forEach(function (b) {
+      b.onclick = function () {
+        estado.editando = { rid: b.dataset.rid, i: +b.dataset.i };
+        if (b.dataset.destino) location.hash = b.dataset.destino; else desenhar();
+        setTimeout(focarEdicao, 50);
+      };
+    });
+    app.querySelectorAll('[data-cancelar]').forEach(function (b) { b.onclick = function () { estado.editando = null; desenhar(); }; });
+    app.querySelectorAll('[data-salvar]').forEach(function (b) {
+      b.onclick = function () {
+        acaoPainel({ acao: 'pendencia', op: 'editar', reuniaoId: b.dataset.rid, indice: +b.dataset.i, atual: b.dataset.atual,
+          novaAcao: document.getElementById('ed-acao').value, novaData: document.getElementById('ed-data').value }, b);
+      };
+    });
+    app.querySelectorAll('[data-crm]').forEach(function (b) {
+      b.onclick = function () {
+        const campo = app.querySelector('[data-link-de="' + CSS.escape(b.dataset.rid) + '"]');
+        acaoPainel({ acao: 'crm', reuniaoId: b.dataset.rid, link: campo ? campo.value : '' }, b);
+      };
+    });
     const ordem = document.getElementById('ordem');
     if (ordem) ordem.onchange = function () { estado.filtro.ordem = ordem.value; desenhar(); };
     app.querySelectorAll('tr[data-href]').forEach(function (tr) {

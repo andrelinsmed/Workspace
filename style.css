@@ -361,6 +361,52 @@ a.status:hover { text-decoration: none; filter: brightness(1.05); }
   .dia { min-height: 0; }
 }
 
+/* ---------- Ações nas pendências ---------- */
+a.ag-titulo { color: var(--ink); }
+a.ag-titulo:hover { color: var(--accent); text-decoration: none; }
+.acoes-p { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.btn-p { display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--soft); color: var(--ink); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s, color .2s; }
+.btn-p .ic { width: 14px; height: 14px; }
+.btn-p:hover { background: var(--hover); }
+.btn-p[data-concluir]:hover { color: var(--teal); }
+.btn-p.confirmar { background: var(--teal); color: #fff; }
+.btn-p[disabled] { opacity: .5; cursor: default; }
+.pend-form { display: grid; gap: 8px; }
+.pend-form .kicker { margin: 4px 0 0; font-size: 11px; }
+.pend-form textarea, .pend-form input[type=date] {
+  width: 100%; font: inherit; font-size: 15px; color: var(--ink); background: var(--soft);
+  border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 12px; resize: vertical;
+}
+.pend-form textarea:focus, .pend-form input:focus { outline: none; border-color: var(--blue); }
+.pend-botoes { display: flex; gap: 8px; margin-top: 6px; }
+.pend-dica { font-size: 13px; color: var(--muted); }
+.pend.editando { grid-template-columns: 30px 1fr; }
+
+.crm-corrigir h3 { color: var(--red) !important; }
+.crm-item { display: grid; gap: 10px; padding: 16px 0; border-top: 1px solid var(--line); }
+.crm-item:first-of-type { border-top: 0; padding-top: 0; }
+.crm-tit { font-weight: 650; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.crm-link { width: 100%; min-width: 0; }
+.crm-item .btn { justify-self: start; }
+
+/* ---------- Selo "Lia trabalhando" (canto superior direito do compromisso) ---------- */
+.ag-item.com-selo { padding-right: 4px; }
+.selo-lia { position: absolute; top: 10px; right: 0; display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 6px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.selo-pulso { width: 14px; height: 14px; border-radius: 50%; background: var(--blue); position: relative; flex: none; }
+.selo-pulso::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--blue); animation: selo 1.6s var(--out) infinite; }
+@keyframes selo { from { transform: scale(1); opacity: .9; } to { transform: scale(2.2); opacity: 0; } }
+.ag-item.compacto .selo-lia { top: 6px; padding: 3px; }
+.ag-item.compacto .selo-txt { display: none; }
+.ag-item.compacto .selo-pulso { width: 10px; height: 10px; }
+.ag-item.com-selo:not(.compacto) .ag-corpo { padding-right: 140px; }
+
+/* ---------- Aviso flutuante ---------- */
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 50;
+  background: var(--ink); color: var(--bg); padding: 12px 20px; border-radius: 999px; font-size: 14.5px; font-weight: 600; max-width: min(560px, 90vw); text-align: center;
+  transition: opacity .4s var(--out), transform .4s var(--out); box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+.toast.mostrar { opacity: 1; transform: translate(-50%, 0); }
+.toast.erro { background: var(--red); color: #fff; }
+
 /* ---------- Entradas (up · fz · fi) ---------- */
 .entrar .a { animation: var(--an, up) .9s var(--out) both; animation-delay: var(--d, 0s); }
 @keyframes up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
