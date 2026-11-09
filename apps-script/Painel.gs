@@ -32,7 +32,7 @@ function doPost(e) {
   cache.remove('PAINEL_FALHAS');
 
   if (req.acao === 'ping') return painelJson_({ ok: true, robo: PROPS.getProperty('NOME_ASSISTENTE') || 'Lia' });
-  if (req.acao === 'pendencia' || req.acao === 'crm') {
+  if (req.acao === 'pendencia' || req.acao === 'crm' || req.acao === 'comando') {
     try { return painelJson_(painelAcao_(req)); }
     catch (err) { return painelJson_({ ok: false, erro: 'interno', msg: String(err && err.message || err) }); }
   }
@@ -194,8 +194,9 @@ function painelAcao_(req) {
     return { ok: true, msg: 'Combinado. A Lia registra no CRM na próxima rotina (12h, 16h ou 20h).' };
   }
 
-  // ---- Pendência: concluir ou editar texto/data ----
+  // ---- Pendência: concluir ou editar texto/data (ou comando livre interpretado pela IA) ----
   var fups = painelFollowups_(get('Follow-ups JSON'), get('Follow-up'));
+  if (req.acao === 'comando') return painelComando_(req, sh, linha, get, set, fups, titulo, agoraTxt);
   var i = Number(req.indice);
   if (!(i >= 0 && i < fups.length) || (req.atual && String(req.atual) !== String(fups[i].acao))) {
     return { ok: false, erro: 'mudou', msg: 'Essa pendência mudou desde que o painel carregou. Atualize e tente de novo.' };
@@ -304,4 +305,165 @@ function painelMoverLembrete_(sh, linha, rid, i, f, titulo, tipo, dataReuniao) {
     }
     return '';
   } catch (e) { return 'Não consegui mexer na agenda: ' + e.message; }
+}
+
+/* =========================================================
+   COMANDO LIVRE NUMA PENDÊNCIA ("o doutor não respondeu…")
+   1) planejar: a IA lê o comando e devolve o que vai fazer (nada é gravado)
+   2) executar: aplica o plano aprovado — follow-up no CRM, nova data/texto, concluir
+   ========================================================= */
+function painelComando_(req, sh, linha, get, set, fups, titulo, agoraTxt) {
+  var i = Number(req.indice);
+  if (!(i >= 0 && i < fups.length) || (req.atual && String(req.atual) !== String(fups[i].acao))) {
+    return { ok: false, erro: 'mudou', msg: 'Essa pendência mudou desde que o painel carregou. Atualize e tente de novo.' };
+  }
+  var f = fups[i];
+  var hoje = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  var diaSem = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][Number(Utilities.formatDate(new Date(), TZ, 'u')) % 7];
+
+  if (req.op === 'planejar') {
+    var comando = String(req.comando || '').trim();
+    if (!comando) return { ok: false, erro: 'texto', msg: 'Escreva o que aconteceu ou o que a Lia deve fazer.' };
+    var prompt =
+      'Você ajuda Leticia Soares (Account Executive da Crisalix) a resolver uma pendência comercial.\n' +
+      'Hoje é ' + diaSem + ', ' + hoje + '.\n' +
+      'Reunião de origem: "' + titulo + '" com ' + (get('Profissional') || 'o cliente') + '.\n' +
+      'Pendência: "' + f.acao + '"' + (f.data ? ' (prevista para ' + f.data + ')' : ' (sem data)') + '.\n' +
+      'Comando da Leticia: "' + comando + '"\n\n' +
+      'Decida o que fazer e responda SOMENTE em JSON com as chaves:\n' +
+      '{"concluir": boolean, "novaAcao": string, "novaData": "AAAA-MM-DD" ou "", "followupCrm": null ou {"feedback": string, "proximoPasso": string}, "resumo": string}\n' +
+      'Regras: concluir=true só se a pendência foi resolvida. Se o cliente não respondeu ou pediu para falar depois, mantenha a pendência com nova data ' +
+      '(se a Leticia não disser a data, use 2 dias úteis a partir de hoje) e, se fizer sentido registrar a tentativa, preencha followupCrm. ' +
+      'novaAcao: o texto atualizado da pendência (curto, verbo no infinitivo) ou "" para manter. ' +
+      'followupCrm.feedback em primeira pessoa da Leticia (ex.: "Enviei mensagem para o Dr. X e ainda não tive retorno."), sem mencionar IA; proximoPasso curto. ' +
+      'Não invente fatos. resumo: uma frase para a Leticia dizendo o que será feito.';
+    var bruto = gemini_(prompt, true);
+    var plano;
+    try { plano = typeof bruto === 'string' ? JSON.parse(String(bruto).replace(/^```(?:json)?\s*|\s*```$/g, '')) : bruto; }
+    catch (e) { return { ok: false, erro: 'ia', msg: 'Não entendi o comando. Tente escrever de outro jeito.' }; }
+    return { ok: true, plano: painelPlanoLimpo_(plano, f) };
+  }
+
+  if (req.op === 'executar') {
+    var p = painelPlanoLimpo_(req.plano || {}, f);
+    var feito = [];
+    // 1) follow-up no CRM (nota fixada, como o no-show)
+    if (p.followupCrm) {
+      var idCad = (String(req.linkCrm || get('Link CRM') || '').match(/surgeons\/(\d+)/) || [])[1];
+      if (!idCad) return { ok: false, erro: 'crm', msg: 'Não sei qual é o cadastro desse doutor no CRM. Corrija o CRM primeiro (cole o link do cadastro).' };
+      var alertaDia = p.novaData || f.data || Utilities.formatDate(new Date(Date.now() + 864e5), TZ, 'yyyy-MM-dd');
+      var r = painelFollowupCrm_(idCad, p.followupCrm.feedback, p.followupCrm.proximoPasso, alertaDia);
+      registrar_('crm_followup', titulo, 'sucesso', 'pelo painel', r);
+      feito.push('Follow-up registrado no CRM.');
+    }
+    // 2) texto/data da pendência + lembrete na agenda
+    var agenda = '';
+    if (p.concluir) {
+      f.feito = true;
+      f.feitoEm = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm");
+      agenda = painelApagarLembrete_(req.reuniaoId, i, f, fups);
+      feito.push('Pendência concluída.');
+    } else if (p.novaAcao || p.novaData) {
+      if (p.novaAcao) f.acao = p.novaAcao;
+      if (p.novaData) f.data = p.novaData;
+      f.editadoEm = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd'T'HH:mm");
+      agenda = painelMoverLembrete_(sh, linha, req.reuniaoId, i, f, titulo, String(get('Tipo')), get('Data'));
+      feito.push('Pendência atualizada' + (p.novaData ? ' para ' + p.novaData.split('-').reverse().slice(0, 2).join('/') : '') + '.');
+    }
+    set('Follow-ups JSON', JSON.stringify(fups));
+    set('Follow-up', painelTextoFollowups_(fups));
+    var datas = fups.filter(function (x) { return !x.feito && x.data; }).map(function (x) { return x.data; }).sort();
+    set('Data Retorno', datas[0] || '');
+    set('Atualizado em', agoraTxt);
+    registrar_('painel_comando', titulo, 'sucesso', '', p.resumo || feito.join(' '));
+    return { ok: true, msg: feito.join(' ') || 'Nada para fazer.', agenda: agenda };
+  }
+  return { ok: false, erro: 'op', msg: 'Ação desconhecida.' };
+}
+
+function painelPlanoLimpo_(p, f) {
+  var data = String(p.novaData || '');
+  var fu = p.followupCrm && p.followupCrm.feedback ? { feedback: String(p.followupCrm.feedback).slice(0, 1500), proximoPasso: String(p.followupCrm.proximoPasso || '').slice(0, 300) } : null;
+  return {
+    concluir: p.concluir === true,
+    novaAcao: String(p.novaAcao || '').trim() === String(f.acao) ? '' : String(p.novaAcao || '').trim().slice(0, 300),
+    novaData: /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : '',
+    followupCrm: fu,
+    resumo: String(p.resumo || '').slice(0, 300)
+  };
+}
+
+/** Cria follow-up no CRM como nota fixada (mesmo formulário do no-show), com alerta às 9h do dia indicado. */
+function painelFollowupCrm_(idCad, feedback, proximo, diaAlerta) {
+  var jar = crmLogin_();
+  var form = crmGet_(jar, '/followups/new?surgeon_id=' + idCad).getContentText();
+  var op = crmOpcoes_(form);
+  var alerta = alertaData_(diaAlerta);
+  var res = crmPost_(jar, '/followups', {
+    'authenticity_token': tokenDoForm_(form, '/followups'),
+    'followup[surgeon_id]': idCad,
+    'followup[purpose]': 'Appendix',
+    'followup[treatment_type]': 'invasive',
+    'followup[sub_purpose]': (op.subs['Appendix'] || []).filter(function (s) { return /Pinned/.test(s); })[0] || '',
+    'followup[sub_purpose_text]': '',
+    'followup[true_followup]': 'false',
+    'followup[way]': '8',
+    'followup[feedback]': feedback,
+    'followup[issue_question]': '0',
+    'followup[next_step]': '8',
+    'followup[comments]': proximo || '',
+    'followup[recipient_id]': op.leticia,
+    'followup[send_alert]': 'true',
+    'followup[alert(1i)]': Utilities.formatDate(alerta, TZ, 'yyyy'),
+    'followup[alert(2i)]': String(Number(Utilities.formatDate(alerta, TZ, 'M'))),
+    'followup[alert(3i)]': String(Number(Utilities.formatDate(alerta, TZ, 'd'))),
+    'followup[alert(4i)]': '09',
+    'followup[alert(5i)]': '00',
+    'commit': 'Create'
+  });
+  if (res.getResponseCode() !== 302) throw new Error('o CRM não aceitou o follow-up (código ' + res.getResponseCode() + ')');
+  return CRM + '/surgeons/' + idCad;
+}
+
+/* =========================================================
+   AGENDA DO DIA — seg a sex, por volta das 11h, no Telegram (e cópia no WhatsApp).
+   Mais de um compromisso: uma mensagem curta por compromisso.
+   Instalar uma vez: executar instalarAvisoAgenda no editor.
+   ========================================================= */
+function avisoAgendaDia() {
+  var dia = Number(Utilities.formatDate(new Date(), TZ, 'u'));   // 1 = segunda ... 7 = domingo
+  if (dia > 5) return;
+  var ini = Utilities.parseDate(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd') + ' 00:00', TZ, 'yyyy-MM-dd HH:mm');
+  var fim = new Date(ini.getTime() + 864e5);
+  var res = Calendar.Events.list('primary', { timeMin: ini.toISOString(), timeMax: fim.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 });
+  var itens = (res.items || []).filter(function (ev) {
+    if (ev.status === 'cancelled' || (ev.eventType && ev.eventType !== 'default')) return false;
+    var eu = (ev.attendees || []).filter(function (a) { return a.self; })[0];
+    return !(eu && eu.responseStatus === 'declined');
+  });
+  if (!itens.length) { enviarTelegram_('☀️ Bom dia, Leticia! Hoje sua agenda está livre.'); return; }
+
+  var linhas = itens.map(function (ev) {
+    var lia = !!(ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.crisId);
+    var tipo = '';
+    try { tipo = lia ? 'Lembrete da Lia' : classificar_(ev, ''); } catch (e) { tipo = ''; }
+    var rotulo = /appt/i.test(tipo) ? 'Reunião com prospect' : tipo === 'Cliente' ? 'Reunião com cliente' : tipo === 'Interna' ? 'Reunião interna' : tipo;
+    var hora = ev.start && ev.start.dateTime ? quando_(new Date(ev.start.dateTime)).split(' às ')[1] : 'Dia todo';
+    return '🕐 <b>' + hora + '</b> — ' + escHtml_(ev.summary || '(sem título)') +
+      (rotulo ? '\n' + rotulo : '') + (ev.hangoutLink ? ' · Meet' : '');
+  });
+
+  if (linhas.length === 1) {
+    enviarTelegram_('☀️ Bom dia, Leticia! Hoje você tem 1 compromisso:\n\n' + linhas[0]);
+    return;
+  }
+  enviarTelegram_('☀️ Bom dia, Leticia! Hoje você tem ' + linhas.length + ' compromissos. Vou mandar um por um:');
+  linhas.forEach(function (l) { enviarTelegram_(l); });
+  registrar_('aviso_agenda', linhas.length + ' compromissos', 'sucesso', '', '');
+}
+
+function instalarAvisoAgenda() {
+  ScriptApp.getProjectTriggers().forEach(function (g) { if (g.getHandlerFunction() === 'avisoAgendaDia') ScriptApp.deleteTrigger(g); });
+  ScriptApp.newTrigger('avisoAgendaDia').timeBased().everyDays(1).atHour(11).nearMinute(0).inTimezone(TZ).create();
+  Logger.log('Aviso da agenda instalado: seg a sex, por volta das 11h.');
 }

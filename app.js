@@ -15,6 +15,7 @@
     ultimaCarga: null,
     msgLogin: '',
     editando: null,  // pendência em edição: { rid, i }
+    comando: null,   // comando livre: { rid, i, atual, texto, plano }
     filtro: { tipo: 'todos', busca: '', ordem: 'recente' }
   };
 
@@ -72,6 +73,7 @@
   }
   const IC = {
     atualizar: '<svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>',
+    raio: '<svg class="ic" viewBox="0 0 24 24"><path d="M13 3L5 13h6l-1 8 8-10h-6z"/></svg>',
     check: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></svg>',
     lapis: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
     externo: '<svg class="ic" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>'
@@ -115,13 +117,18 @@
     desenhar();
   }
 
+  function focarComando() {
+    const t = document.getElementById('cmd-txt');
+    if (t) { t.focus(); t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+
   function focarEdicao() {
     const t = document.getElementById('ed-acao');
     if (t) { t.focus(); t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }
 
   /* Envia uma ação de escrita para a Lia e recarrega os dados */
-  async function acaoPainel(payload, botao) {
+  async function acaoPainel(payload, botao, soConsulta) {
     const robo = CFG.robos.find(function (r) { return r.id === 'lia'; });
     const original = botao.innerHTML;
     botao.disabled = true; botao.textContent = 'Salvando…';
@@ -139,7 +146,9 @@
         botao.disabled = false; botao.innerHTML = original;
         return;
       }
+      if (soConsulta) { botao.disabled = false; botao.innerHTML = original; return d; }
       estado.editando = null;
+      estado.comando = null;
       aviso([d.msg, d.agenda].filter(Boolean).join(' '));
       await carregarTudo();
     } catch (e) {
@@ -306,7 +315,12 @@
       dr.feitos = dr.feitos.sort(function (a, b) { return b.data.localeCompare(a.data); })
         .filter(function (f) { if (vistos[f.texto]) return false; vistos[f.texto] = 1; return true; });
       dr.abertas = dr.pendencias.filter(function (p) { return !p.data || diasEntre(hoje, p.data) >= -7; });
-      dr.emAndamento = dr.feitos.length > 0 || dr.abertas.length > 0;
+      // Concluiu tudo pelo painel → vai para o Arquivo (volta sozinho se surgir pendência nova)
+      dr.concluidas = [];
+      dr.reunioes.forEach(function (r) { (r.followups || []).forEach(function (f) { if (f && f.feito) dr.concluidas.push({ acao: f.acao, em: f.feitoEm || '' }); }); });
+      dr.concluidas.sort(function (x, y) { return (y.em || '').localeCompare(x.em || ''); });
+      dr.arquivado = dr.concluidas.length > 0 && dr.pendencias.length === 0;
+      dr.emAndamento = !dr.arquivado && (dr.feitos.length > 0 || dr.abertas.length > 0);
     });
 
     const semana = montarSemana(d, doutores, agenda, hoje);
@@ -429,13 +443,25 @@
     return { robo: h[0] || '', tipo: h[1] || '', id: h[2] || '', extra: h[3] || '' };
   }
 
+  function menuLia() {
+    const r = rota();
+    if (r.robo !== 'lia') return '';
+    const L = estado.dados.lia;
+    const nArq = L ? L.doutores.filter(function (d) { return d.arquivado; }).length : 0;
+    const itens = [['', 'Hoje'], ['doutores', 'Doutores'], ['arquivo', 'Arquivo' + (nArq ? ' <b>' + nArq + '</b>' : '')], ['historico', 'Histórico']];
+    const atual = r.tipo === 'dr' || r.tipo === 'r' ? '' : r.tipo;
+    return '<nav class="menu">' + itens.map(function (it) {
+      return '<a href="#/lia' + (it[0] ? '/' + it[0] : '') + '" class="' + (atual === it[0] && !(r.tipo === 'dr' || r.tipo === 'r') ? 'ativo' : '') + '">' + it[1] + '</a>';
+    }).join('') + '</nav>';
+  }
+
   function topo(migalhas) {
     const quando = estado.carregando ? 'Atualizando…' : (estado.ultimaCarga ? 'Atualizado às ' + estado.ultimaCarga.toTimeString().slice(0, 5) : '');
     return '<header class="topo"><div class="topo-in">' +
       '<a class="marca" href="#/"><span class="marca-logo">W</span><span class="marca-txt">' + esc(CFG.titulo) + '</span></a>' +
-      (migalhas && migalhas.length ? '<nav class="migalha">' + migalhas.map(function (m) {
+      (rota().robo === 'lia' ? menuLia() : (migalhas && migalhas.length ? '<nav class="migalha">' + migalhas.map(function (m) {
         return '<span>/</span>' + (m.href ? '<a href="' + m.href + '">' + esc(m.t) + '</a>' : '<span>' + esc(m.t) + '</span>');
-      }).join('') + '</nav>' : '') +
+      }).join('') + '</nav>' : '')) +
       '<div class="topo-acoes"><span class="atualizado">' + esc(quando) + '</span>' +
       '<button class="btn btn-icone" data-acao="atualizar" title="Atualizar" ' + (estado.carregando ? 'disabled' : '') + '>' + IC.atualizar + '</button>' +
       '<button class="btn" data-acao="sair">Sair</button></div>' +
@@ -451,6 +477,7 @@
     else if (r.robo === 'lia' && r.tipo === 'r') html = telaReuniao(r.id);
     else if (r.robo === 'lia' && r.tipo === 'doutores') html = telaDoutores();
     else if (r.robo === 'lia' && r.tipo === 'historico') html = telaHistorico();
+    else if (r.robo === 'lia' && r.tipo === 'arquivo') html = telaArquivo();
     else if (r.robo === 'lia') html = telaLia();
     else html = topo([{ t: 'Não encontrado' }]) + '<main class="pagina"><div class="vazio">Página não encontrada. <a href="#/">Voltar</a></div></main>';
     const y = window.scrollY;
@@ -557,7 +584,8 @@
     const destino = dr ? '#/lia/dr/' + encodeURIComponent(dr) : reuniao ? '#/lia/r/' + encodeURIComponent(reuniao) : '';
     return '<span class="acoes-p">' +
       '<button class="btn-p" data-concluir="1" data-rid="' + esc(rid) + '" data-i="' + i + '" data-atual="' + esc(atual) + '">' + IC.check + 'Concluir</button>' +
-      '<button class="btn-p" data-corrigir="1" data-rid="' + esc(rid) + '" data-i="' + i + '" data-destino="' + esc(destino) + '">' + IC.lapis + 'Corrigir</button></span>';
+      '<button class="btn-p" data-corrigir="1" data-rid="' + esc(rid) + '" data-i="' + i + '" data-destino="' + esc(destino) + '">' + IC.lapis + 'Corrigir</button>' +
+      '<button class="btn-p" data-ir-comando="1" data-rid="' + esc(rid) + '" data-i="' + i + '" data-atual="' + esc(atual) + '" data-destino="' + esc(destino) + '">' + IC.raio + 'Comando</button></span>';
   }
 
   function itemAgenda(it, compacto) {
@@ -624,7 +652,7 @@
       '<section class="secao' + a('up', 1) + '"><div class="secao-titulo"><h2>Em andamento.</h2><span class="sub">o que a Lia fez nos últimos 7 dias e o que está aberto</span></div>' +
       (andamento.length ? '<div class="drs">' + andamento.map(cardDoutor).join('') + '</div>' : '<div class="cartao vazio">Nada em andamento nesta semana.</div>') +
       '</section>' +
-      '<nav class="rodape-links' + a('fi', 1.2) + '"><a href="#/lia/doutores">Todos os doutores <b>' + L.doutores.length + '</b></a><a href="#/lia/historico">Números, CRM e histórico de reuniões</a></nav>' +
+
       '</main>';
   }
 
@@ -655,6 +683,28 @@
       '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Lia · carteira</span><h1 class="' + a('up', .2) + '">Doutores.</h1></div></div>' +
       '<div class="filtros' + a('fi', .5) + '" style="margin-bottom:24px">' + filtros + '<div class="legenda"><span class="dotc" style="--c:var(--orange)">Prospect</span><span class="dotc" style="--c:var(--teal)">Cliente</span></div></div>' +
       (drs.length ? '<div class="drs' + a('up', .6) + '">' + drs.map(cardDoutor).join('') + '</div>' : '<div class="cartao vazio">Nenhum doutor com esse filtro.</div>') +
+      '</main>';
+  }
+
+  /* ----- Arquivo: doutores com tudo concluído ----- */
+  function telaArquivo() {
+    const L = estado.dados.lia;
+    const mig = [{ t: 'Lia', href: '#/lia' }, { t: 'Arquivo' }];
+    if (!L) return topo(mig) + '<main class="pagina">' + esperando('lia') + '</main>';
+    const arq = L.doutores.filter(function (d) { return d.arquivado; })
+      .sort(function (x, y) { return (y.concluidas[0].em || '').localeCompare(x.concluidas[0].em || ''); });
+    return topo(mig) + '<main class="pagina">' +
+      '<div class="cabeca"><div><span class="kicker' + a('fi', .1) + '">Lia · concluídos</span><h1 class="' + a('up', .2) + '">Arquivo.</h1>' +
+      '<p class="lede' + a('up', .5) + '">Doutores com todas as pendências concluídas. Se aparecer pendência nova, o card volta sozinho para a tela principal.</p></div></div>' +
+      (arq.length ? '<div class="drs' + a('up', .6) + '">' + arq.map(function (d) {
+        return '<a class="cartao dr arquivado" href="#/lia/dr/' + encodeURIComponent(d.chave) + '">' +
+          '<div class="dr-topo"><div class="dr-ini ' + d.status + '">' + esc(iniciais(d.nome)) + '</div>' +
+          '<div style="min-width:0;flex:1"><div class="dr-nome">' + esc(d.nome) + '</div><div class="dr-sub">Última reunião ' + esc(fmtData(d.ultima.data)) + '</div></div>' +
+          '<span class="etq ' + d.status + '">' + (d.status === 'cliente' ? 'Cliente' : 'Prospect') + '</span></div>' +
+          '<div class="dr-feitos">' + d.concluidas.slice(0, 3).map(function (c) {
+            return '<div class="feito">' + IC.check + '<span>' + esc(c.acao) + '</span><span class="quando-f">' + esc(c.em ? fmtData(c.em) : '') + '</span></div>';
+          }).join('') + '</div></a>';
+      }).join('') + '</div>' : '<div class="cartao vazio">Nada arquivado ainda. Quando você concluir as pendências de um doutor, ele vem para cá.</div>') +
       '</main>';
   }
 
@@ -777,10 +827,37 @@
   }
 
   /* Pendências com Concluir / Corrigir (edição na própria linha) */
-  function listaPendencias(lista, hoje) {
+  function formComando(p, linkCrm) {
+    const c = estado.comando;
+    let corpo;
+    if (c.plano) {
+      const pl = c.plano, itens = [];
+      if (pl.followupCrm) itens.push('<b>Registrar follow-up no CRM:</b> ' + esc(pl.followupCrm.feedback) + (pl.followupCrm.proximoPasso ? ' <span class="r">Próximo passo: ' + esc(pl.followupCrm.proximoPasso) + '</span>' : ''));
+      if (pl.concluir) itens.push('<b>Concluir a pendência</b> e tirar o lembrete da agenda.');
+      else {
+        if (pl.novaAcao) itens.push('<b>Mudar a pendência para:</b> ' + esc(pl.novaAcao));
+        if (pl.novaData) itens.push('<b>Nova data:</b> ' + esc(diaSemana(pl.novaData)) + ' ' + esc(fmtData(pl.novaData)) + ' (o lembrete da agenda muda junto)');
+      }
+      if (!itens.length) itens.push('Nada a mudar.');
+      corpo = '<div class="kicker">A Lia vai fazer</div>' + (pl.resumo ? '<div class="plano-resumo">' + esc(pl.resumo) + '</div>' : '') +
+        '<div class="plano">' + itens.map(function (t) { return '<div class="plano-item">' + IC.check + '<span>' + t + '</span></div>'; }).join('') + '</div>' +
+        '<div class="pend-botoes"><button class="btn btn-primario" data-executar="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '" data-atual="' + esc(p.acao) + '" data-link="' + esc(linkCrm || '') + '">Executar</button>' +
+        '<button class="btn" data-refazer-comando="1">Mudar o comando</button><button class="btn" data-cancelar="1">Cancelar</button></div>';
+    } else {
+      corpo = '<label class="kicker" for="cmd-txt">O que aconteceu? O que a Lia deve fazer?</label>' +
+        '<textarea id="cmd-txt" rows="3" placeholder="Ex.: o doutor não respondeu a mensagem; tentar de novo na quinta e registrar no CRM">' + esc(c.texto || '') + '</textarea>' +
+        '<div class="pend-botoes"><button class="btn btn-primario" data-planejar="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '" data-atual="' + esc(p.acao) + '">Ver o que a Lia vai fazer</button>' +
+        '<button class="btn" data-cancelar="1">Cancelar</button></div>' +
+        '<div class="pend-dica">Nada é gravado antes de você clicar em Executar.</div>';
+    }
+    return '<div class="pend editando"><span class="bola"></span><div class="pend-form"><div class="pend-atual">' + esc(p.acao) + '</div>' + corpo + '</div></div>';
+  }
+
+  function listaPendencias(lista, hoje, linkCrm) {
     if (!lista.length) return '<div style="color:var(--muted);font-size:14.5px">Nenhuma pendência aberta.</div>';
     return '<div class="pend-lista">' + lista.map(function (p) {
       const atras = p.data && p.data < hoje && !p.estimada;
+      if (estado.comando && estado.comando.rid === p.rid && estado.comando.i === p.i) return formComando(p, linkCrm);
       const ed = estado.editando && estado.editando.rid === p.rid && estado.editando.i === p.i;
       if (ed) {
         return '<div class="pend editando"><span class="bola"></span><div class="pend-form">' +
@@ -795,7 +872,8 @@
           (p.estimada ? ' · data de retorno' : p.combinado ? ' · combinado' : '') + '</div>' : '') +
         (p.rid != null ? '<span class="acoes-p">' +
           '<button class="btn-p" data-concluir="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '" data-atual="' + esc(p.acao) + '">' + IC.check + 'Concluir</button>' +
-          '<button class="btn-p" data-editar="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '">' + IC.lapis + 'Corrigir</button></span>' : '') +
+          '<button class="btn-p" data-editar="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '">' + IC.lapis + 'Corrigir</button>' +
+          '<button class="btn-p" data-comando="1" data-rid="' + esc(p.rid) + '" data-i="' + p.i + '" data-atual="' + esc(p.acao) + '">' + IC.raio + 'Comando</button></span>' : '') +
         '</div></div>';
     }).join('') + '</div>';
   }
@@ -828,7 +906,7 @@
     if (d.linkCrm) acoes.push('<a class="btn" href="' + esc(d.linkCrm) + '" target="_blank" rel="noopener">Abrir no CRM ' + IC.externo + '</a>');
     if (sel.doc) acoes.push('<a class="btn" href="' + esc(sel.doc) + '" target="_blank" rel="noopener">Transcrição ' + IC.externo + '</a>');
 
-    const pend = listaPendencias(d.pendencias, hoje);
+    const pend = listaPendencias(d.pendencias, hoje, d.linkCrm);
 
     const linha = '<div class="linha-tempo">' + d.reunioes.map(function (r) {
       return '<a class="lt-item' + (r === sel ? ' atual' : '') + '" href="#/lia/dr/' + encodeURIComponent(d.chave) + '/' + encodeURIComponent(r.id) + '" style="color:inherit;text-decoration:none">' +
@@ -866,7 +944,7 @@
     const r = L.reunioes.find(function (x) { return x.id === id; });
     if (!r) return topo([{ t: 'Lia', href: '#/lia' }]) + '<main class="pagina"><div class="cartao vazio">Reunião não encontrada.</div></main>';
     const pend = pendenciasDe(r);
-    const pendHtml = listaPendencias(pend, L.hoje);
+    const pendHtml = listaPendencias(pend, L.hoje, '');
     return topo([{ t: 'Lia', href: '#/lia' }, { t: r.titulo }]) + '<main class="pagina">' +
       '<div class="cartao dr-cabeca' + a('fz', .2) + '"><div style="min-width:0"><span class="kicker">Reunião interna</span><h1>' + esc(r.titulo) + '.</h1>' +
       '<div class="meta">' + etqTipo(r) + '<span>' + esc(fmtData(r.data, true)) + ' · ' + esc(relativo(r.data)) + '</span></div></div>' +
@@ -942,7 +1020,34 @@
         setTimeout(focarEdicao, 50);
       };
     });
-    app.querySelectorAll('[data-cancelar]').forEach(function (b) { b.onclick = function () { estado.editando = null; desenhar(); }; });
+    app.querySelectorAll('[data-cancelar]').forEach(function (b) { b.onclick = function () { estado.editando = null; estado.comando = null; desenhar(); }; });
+    app.querySelectorAll('[data-comando]').forEach(function (b) {
+      b.onclick = function () { estado.editando = null; estado.comando = { rid: b.dataset.rid, i: +b.dataset.i, atual: b.dataset.atual }; desenhar(); focarComando(); };
+    });
+    app.querySelectorAll('[data-ir-comando]').forEach(function (b) {
+      b.onclick = function () {
+        estado.editando = null; estado.comando = { rid: b.dataset.rid, i: +b.dataset.i, atual: b.dataset.atual };
+        if (b.dataset.destino) location.hash = b.dataset.destino; else desenhar();
+        setTimeout(focarComando, 50);
+      };
+    });
+    app.querySelectorAll('[data-refazer-comando]').forEach(function (b) {
+      b.onclick = function () { estado.comando.plano = null; desenhar(); focarComando(); };
+    });
+    app.querySelectorAll('[data-planejar]').forEach(function (b) {
+      b.onclick = async function () {
+        const txt = document.getElementById('cmd-txt').value.trim();
+        if (!txt) { aviso('Escreva o que aconteceu.', true); return; }
+        estado.comando.texto = txt;
+        const d = await acaoPainel({ acao: 'comando', op: 'planejar', reuniaoId: b.dataset.rid, indice: +b.dataset.i, atual: b.dataset.atual, comando: txt }, b, true);
+        if (d && d.plano) { estado.comando.plano = d.plano; desenhar(); }
+      };
+    });
+    app.querySelectorAll('[data-executar]').forEach(function (b) {
+      b.onclick = function () {
+        acaoPainel({ acao: 'comando', op: 'executar', reuniaoId: b.dataset.rid, indice: +b.dataset.i, atual: b.dataset.atual, plano: estado.comando.plano, linkCrm: b.dataset.link }, b);
+      };
+    });
     app.querySelectorAll('[data-salvar]').forEach(function (b) {
       b.onclick = function () {
         acaoPainel({ acao: 'pendencia', op: 'editar', reuniaoId: b.dataset.rid, indice: +b.dataset.i, atual: b.dataset.atual,

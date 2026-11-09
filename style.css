@@ -407,6 +407,27 @@ a.ag-titulo:hover { color: var(--accent); text-decoration: none; }
 .toast.mostrar { opacity: 1; transform: translate(-50%, 0); }
 .toast.erro { background: var(--red); color: #fff; }
 
+/* ---------- Menu superior da Lia ---------- */
+.menu { display: flex; gap: 4px; background: var(--hover); border-radius: 999px; padding: 3px; margin-left: 8px; overflow-x: auto; }
+.menu a { padding: 6px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: background .3s, color .3s; }
+.menu a:hover { text-decoration: none; color: var(--ink); }
+.menu a.ativo { background: var(--card); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .08); }
+.menu a b { font-weight: 700; color: var(--teal); margin-left: 2px; }
+
+/* ---------- Comando ---------- */
+.pend-atual { font-size: 15px; font-weight: 600; }
+.plano-resumo { font-size: 15px; margin-bottom: 4px; }
+.plano { display: grid; gap: 8px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
+.plano-item { display: grid; grid-template-columns: 16px 1fr; gap: 8px; font-size: 14px; line-height: 1.45; }
+.plano-item .ic { color: var(--teal); margin-top: 3px; width: 15px; height: 15px; }
+.plano-item .r { display: block; margin-top: 2px; }
+.dr.arquivado .dr-ini { opacity: .7; }
+
+@media (max-width: 760px) {
+  .menu { margin-left: 0; }
+  .menu a { padding: 6px 10px; font-size: 13px; }
+}
+
 /* ---------- Entradas (up · fz · fi) ---------- */
 .entrar .a { animation: var(--an, up) .9s var(--out) both; animation-delay: var(--d, 0s); }
 @keyframes up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
