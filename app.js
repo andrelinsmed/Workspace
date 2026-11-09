@@ -269,8 +269,11 @@
     const e = L.bruto.estado || {};
     const hoje = L.hoje;
     const falhasHoje = (L.bruto.historico || []).filter(function (h) { return (h.data || '').slice(0, 10) === hoje && h.resultado === 'falha'; }).length;
-    const dias = e.ultimaExecucao ? diasEntre(e.ultimaExecucao, hoje) : null;
-    if (dias === null || dias > 2) return { classe: 'erro', texto: 'Parada desde ' + (e.ultimaExecucao ? fmtData(e.ultimaExecucao) : '—') };
+    // Última atividade: a mais recente entre a rotina diária e o Histórico
+    const ultimaHist = (L.bruto.historico || []).map(function (x) { return (x.data || '').slice(0, 10); }).filter(Boolean).sort().pop() || '';
+    const ref = [String(e.ultimaExecucao || '').slice(0, 10), ultimaHist].filter(Boolean).sort().pop() || '';
+    const dias = ref ? diasEntre(ref, hoje) : null;
+    if (dias === null || dias > 2) return { classe: 'erro', texto: ref ? 'Sem atividade desde ' + fmtData(ref) : 'Sem atividade registrada' };
     if (falhasHoje) return { classe: 'alerta', texto: plural(falhasHoje, 'falha hoje', 'falhas hoje') };
     return { classe: 'ok', texto: 'Funcionando' };
   }
