@@ -496,7 +496,7 @@
     const tag = it.href ? 'a' : 'div';
     const attrs = it.href ? ' href="' + esc(it.href) + '"' + (it.externo ? ' target="_blank" rel="noopener"' : '') : '';
     return '<' + tag + ' class="ag-item' + (compacto ? ' compacto' : '') + '"' + attrs + ' style="--c:' + TIPO_AG[it.tipo].c + '">' +
-      '<span class="ag-hora">' + esc(it.hora || '—') + '</span>' +
+      (compacto && !it.hora ? '' : '<span class="ag-hora">' + esc(it.hora || '—') + '</span>') +
       '<span class="ag-corpo"><span class="ag-titulo">' + esc(it.titulo) + '</span>' +
       (it.sub ? '<span class="ag-sub">' + esc(it.sub) + (it.estimada ? ' · data de retorno' : '') + '</span>' : '') +
       (compacto ? '' : '<span class="ag-tipo">' + TIPO_AG[it.tipo].r + '</span>') + '</span></' + tag + '>';
